@@ -16,6 +16,7 @@
 #include <zephyr/logging/log.h>
 
 #include <zmk/behavior.h>
+#include <zmk/behavior_driver.h>
 #include <zmk/behavior_queue.h>
 #include <zmk/keymap.h>
 #include <zmk/sensors.h>
