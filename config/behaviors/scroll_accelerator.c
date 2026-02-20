@@ -13,6 +13,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
 #include <zmk/behavior.h>
 #include <zmk/behavior_queue.h>
