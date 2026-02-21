@@ -115,7 +115,7 @@
             bindings = <
 &kp GRAVE  &kp F1  &kp F2    &kp F3        &kp F4     &kp F5           &bt BT_CLR  &kp C_MUTE    &kp F6        &kp F7        &kp SLASH     &kp ASTERISK  &kp MINUS      &kp BSPC
 &trans     &trans  &trans    &kp UP_ARROW  &trans     &out OUT_TOG     &kp F11     &kp NUMBER_7  &kp NUMBER_8  &kp NUMBER_9  &kp PLUS      &kp ENTER
-&trans     &trans  &kp LEFT  &kp DOWN      &kp RIGHT  &trans           &mkp RCLK   &mkp RCLK     &kp F12       &kp NUMBER_4  &kp NUMBER_5  &kp NUMBER_6  &kp BACKSPACE  &kp LEFT_BRACKET
+&trans     &kp LC(LS(LG(N4)))  &kp LEFT  &kp DOWN      &kp RIGHT  &trans           &mkp RCLK   &mkp RCLK     &kp F12       &kp NUMBER_4  &kp NUMBER_5  &kp NUMBER_6  &kp BACKSPACE  &kp LEFT_BRACKET
 &trans     &trans  &trans    &trans        &trans     &rgb_ug RGB_TOG  &trans      &trans        &bl BL_DEC    &bl BL_INC    &kp F13       &kp NUMBER_1  &kp NUMBER_2   &kp NUMBER_3      &kp EQUAL  &kp RIGHT_BRACKET
 &BOT       &trans  &trans    &mo 2         &kp ENTER  &kp ENTER        &mo 2       &kp NUMBER_0  &kp DOT       &BOT
             >;
