@@ -49,7 +49,7 @@ uint32_t trackpoint_last_move_time = 0;  // 小红点最后移动时间
 static int16_t scroll_accumulator_x = 0;  // 水平滚动累计
 static int16_t scroll_accumulator_y = 0;  // 垂直滚动累计
 #define SCROLL_THRESHOLD 8               // 滚动阈值，累计超过此值才发送滚动事件
-#define SCROLL_SPEED_DIVISOR 2           // 滚动速度除数：降低滚动敏感度（2=50%，3=33%，4=25%）
+#define SCROLL_SPEED_DIVISOR 3           // 滚动速度除数：降低滚动敏感度（2=50%，3=33%，4=25%）
 
 /* ========= J 键监听 =========
  * 检测 J 键(position 35)状态：
