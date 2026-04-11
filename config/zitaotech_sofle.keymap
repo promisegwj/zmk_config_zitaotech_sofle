@@ -98,6 +98,8 @@
             label = "TDCAPTOLAY3";
             #binding-cells = <0>;
             bindings = <&kp CAPS>, <&to 3>;
+
+            tapping-term-ms = <250>;
         };
     };
 
