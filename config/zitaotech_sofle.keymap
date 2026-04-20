@@ -146,11 +146,11 @@
         mouse_layer {
             display-name = "MOUSE";
             bindings = <
-&trans     &trans  &trans        &trans  &trans    &trans    &trans     &trans         &trans    &trans     &trans   &trans     &trans  &trans
-&trans     &trans  &trans        &trans  &trans    &trans    &kp ENTER  &kp LG(W)      &trans    &trans     &trans   &trans
-&trans     &trans  &trans        &trans  &trans    &trans    &mkp LCLK  &mkp LCLK      &mkp MB1  &none      &trans   &trans     &trans  &trans
-&trans     &trans  &trans        &trans  &trans    &trans    &mkp MCLK  &none          &trans    &trans     &kp F13  &kp LG(R)  &trans  &trans  &trans  &trans
-&kp LCTRL  &trans  &kp LEFT_ALT  &trans  &mkp MB1  &mkp MB3  &mkp MB2   &kp RIGHT_ALT  &trans    &kp RCTRL
+&trans           &trans        &trans        &trans  &trans    &trans    &trans     &trans         &trans         &trans     &trans   &trans     &trans  &trans
+&trans           &trans        &trans        &trans  &trans    &trans    &kp ENTER  &kp LG(W)      &trans         &trans     &trans   &trans
+&trans           &trans        &trans        &trans  &trans    &trans    &mkp LCLK  &mkp LCLK      &mkp MB1       &none      &trans   &trans     &trans  &trans
+&kp RIGHT_SHIFT  &trans        &trans        &trans  &trans    &trans    &mkp MCLK  &none          &trans         &trans     &kp F13  &kp LG(R)  &trans  &trans  &trans  &kp RIGHT_SHIFT
+&kp LCTRL        &kp LEFT_WIN  &kp LEFT_ALT  &trans  &mkp MB1  &mkp MB3  &mkp MB2   &kp RIGHT_ALT  &kp RIGHT_WIN  &kp RCTRL
             >;
 
             sensor-bindings = <&inc_dec_kp PG_UP PG_DN &scroll_accel>;
