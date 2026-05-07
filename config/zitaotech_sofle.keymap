@@ -133,11 +133,11 @@
         func_layer {
             display-name = "FUNC";
             bindings = <
-&kp GRAVE  &kp F1              &kp F2       &kp F3        &kp F4         &kp F5           &bt BT_CLR  &kp C_MUTE    &kp F6        &kp F7      &kp F8        &kp F9            &kp F10       &kp DEL
-&trans     &trans              &kp HOME     &kp UP_ARROW  &kp END        &out OUT_TOG     &kp N7      &kp N8        &kp N9        &kp PLUS    &kp F11       &kp LEFT_BRACKET
-&trans     &kp LC(LS(LG(N4)))  &kp LEFT     &kp DOWN      &kp RIGHT      &trans           &mkp RCLK   &mkp RCLK     &kp NUMBER_4  &kp N5      &kp N6        &kp MINUS         &kp F12       &kp ENTER
-&trans     &trans              &kp PAGE_UP  &trans        &kp PAGE_DOWN  &rgb_ug RGB_TOG  &trans      &trans        &bl BL_DEC    &bl BL_INC  &kp NUMBER_1  &kp NUMBER_2      &kp NUMBER_3  &kp EQUAL  &kp F13  &kp RIGHT_BRACKET
-&BOT       &trans              &trans       &mo 2         &kp ENTER      &kp ENTER        &mo 2       &kp NUMBER_0  &kp DOT       &BOT
+&kp GRAVE             &kp F1                 &kp F2       &kp F3        &kp F4         &kp F5                    &bt BT_CLR  &kp C_MUTE    &kp F6        &kp F7      &kp F8        &kp F9           &kp F10       &kp DELETE
+&kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &kp HOME     &kp UP_ARROW  &kp END        &out OUT_TOG              &kp N7      &kp N8        &kp N9        &kp PLUS    &kp F11       &kp PRINTSCREEN
+&kp LEFT_BRACKET      &kp RIGHT_BRACKET      &kp LEFT     &kp DOWN      &kp RIGHT      &kp LC(LS(LG(NUMBER_4)))  &mkp RCLK   &mkp RCLK     &kp NUMBER_4  &kp N5      &kp N6        &kp MINUS        &kp F12       &kp ENTER
+&kp LEFT_BRACE        &kp RIGHT_BRACE        &kp PAGE_UP  &trans        &kp PAGE_DOWN  &rgb_ug RGB_TOG           &trans      &trans        &bl BL_DEC    &bl BL_INC  &kp NUMBER_1  &kp NUMBER_2     &kp NUMBER_3  &kp EQUAL   &kp F13  &kp RIGHT_SHIFT
+&BOT                  &trans                 &trans       &mo 2         &kp ENTER      &kp ENTER                 &mo 2       &kp NUMBER_0  &kp DOT       &BOT
             >;
 
             sensor-bindings = <&BLE_encoder &scroll_accel>;
