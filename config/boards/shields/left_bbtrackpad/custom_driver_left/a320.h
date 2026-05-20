@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef A320_0x3B_H
-#define A320_0x3B_H
+#ifndef A320_H
+#define A320_H
 
 #ifdef __cplusplus
 extern "C" {
