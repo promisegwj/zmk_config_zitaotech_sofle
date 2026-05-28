@@ -385,10 +385,8 @@ path.combo {
 </g>
 <g transform="translate(483, 313) rotate(-23.869)" class="key keypos-61">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.9em">&amp;mkp</tspan><tspan x="0" dy="1.2em">MB3</tspan>
-</text>
-<text x="0" y="24" class="key hold">ENTER</text>
+<text x="0" y="0" class="key tap">ENTER</text>
+<text x="0" y="24" class="key hold"><tspan style="font-size: 88%">&amp;mkp MB3</tspan></text>
 </g>
 <g transform="translate(550, 293) rotate(-11.93)" class="key keypos-62">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
@@ -543,7 +541,9 @@ path.combo {
 </g>
 <g transform="translate(308, 154)" class="key keypos-31">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">Sft+D</text>
+<text x="0" y="0" class="key tap">
+<tspan x="0" dy="-0.6em">Sft+Ctl</tspan><tspan x="0" dy="1.2em">+D</tspan>
+</text>
 </g>
 <g transform="translate(381, 91)" class="key keypos-32">
 <rect rx="6" ry="6" x="-19" y="-19" width="38" height="38" class="key"/>

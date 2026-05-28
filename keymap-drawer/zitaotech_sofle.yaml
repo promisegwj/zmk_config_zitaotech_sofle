@@ -62,7 +62,7 @@ layers:
   - LALT
   - {t: SPACE, h: FUNC}
   - ENTER
-  - {t: '&mkp MB3', h: ENTER}
+  - {t: ENTER, h: '&mkp MB3'}
   - {t: SPACE, h: FUNC}
   - RALT
   - RGUI
@@ -99,7 +99,7 @@ layers:
   - LEFT
   - DOWN
   - RIGHT
-  - Sft+D
+  - Sft+Ctl+D
   - '&mkp RCLK'
   - '&mkp RCLK'
   - '4'
