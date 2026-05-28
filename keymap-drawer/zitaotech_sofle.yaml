@@ -62,7 +62,7 @@ layers:
   - LALT
   - {t: SPACE, h: FUNC}
   - ENTER
-  - {t: ENTER, h: SCROLL}
+  - ENTER
   - {t: SPACE, h: FUNC}
   - RALT
   - RGUI
