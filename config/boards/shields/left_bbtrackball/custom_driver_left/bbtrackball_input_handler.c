@@ -155,7 +155,7 @@ static int space_listener_cb(const zmk_event_t *eh) {
         arrow_key_pressed = ev->state;
     }
 
-    if (ev->position == 60 || ev->position == 61) {
+    if (ev->position == 59 || ev->position == 62) {
         space_pressed = ev->state;
     }
 
