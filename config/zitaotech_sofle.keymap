@@ -17,6 +17,10 @@
 #define NUM 2
 #define BOT bootloader
 
+&lt {
+    tapping-term-ms = <280>;
+};
+
 / {
     input_processors {
         zip_temp_layer: zip_temp_layer {
@@ -89,8 +93,8 @@
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
             flavor = "tap-preferred";     /* 单击优先 */
-            tapping-term-ms = <200>;       /* 长按阈值 */
-            bindings = <&none &kp>;        /* hold=none, tap=space */
+            tapping-term-ms = <280>;       /* 长按阈值 */
+            bindings = <&none>, <&kp>;     /* hold=none, tap=key */
         };
     };
 
@@ -99,7 +103,7 @@
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
             flavor = "tap-preferred";
-            tapping-term-ms = <200>;
+            tapping-term-ms = <280>;
             bindings = <&mkp>, <&kp>;
         };
     };
@@ -122,7 +126,7 @@
 &kp TAB      &kp Q     &kp W     &kp E        &kp R      &kp T           &kp Y        &kp U       &kp I          &kp O          &kp P   &kp BSLH
 &TdCapToLay  &kp A     &kp S     &kp D        &kp F      &kp G           &mkp LCLK    &mkp LCLK   &kp H          &kp J          &kp K   &kp L     &kp SEMI   &kp SQT
 &kp LSHFT    &kp Z     &kp X     &kp C        &kp V      &kp B           &kp PG_DN    &kp PG_UP   &mt LBRC LBKT  &mt RBRC RBKT  &kp N   &kp M     &kp COMMA  &kp DOT   &kp FSLH  &kp DEL
-&kp LCTRL    &kp LGUI  &kp LALT  &lt 1 SPACE  &kp ENTER  &hd1 MB3 ENTER  &lt 1 SPACE  &kp RALT    &kp RGUI       &kp RCTRL
+&kp LCTRL    &kp LGUI  &kp LALT  &lt 1 SPACE  &kp ENTER  &sp_sc 0 ENTER  &lt 1 SPACE  &kp RALT    &kp RGUI       &kp RCTRL
             >;
 
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN &inc_dec_kp LEFT RIGHT>;

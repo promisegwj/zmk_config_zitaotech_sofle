@@ -21,7 +21,6 @@
 #include <zmk/hid.h>
 #include <zmk/events/hid_indicators_changed.h>
 #include <zmk/events/position_state_changed.h>
-#include <zmk/keymap.h>
 
 LOG_MODULE_REGISTER(bbtrackball_input_handler, LOG_LEVEL_INF);
 
@@ -59,7 +58,6 @@ static struct k_work_q bbtrackball_work_q;
 
 #define ARROW_TRIGGER_THRESHOLD 4
 #define ARROW_REPEAT_MS 35
-#define MOUSE_LAYER_ID 3
 
 /* =========================================================
  * Runtime State
@@ -158,7 +156,7 @@ static int space_listener_cb(const zmk_event_t *eh) {
     }
 
     if (ev->position == 61) {
-        space_pressed = ev->state && zmk_keymap_highest_layer_active() == MOUSE_LAYER_ID;
+        space_pressed = ev->state;
     }
 
     return 0;

@@ -19,12 +19,10 @@
 #include <zmk/events/hid_indicators_changed.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/hid.h>
-#include <zmk/keymap.h>
 
 LOG_MODULE_REGISTER(zitaotech_trackpoint_scroll, LOG_LEVEL_INF);
 
 #define TRACKPOINT_SCROLL_POSITION 61
-#define MOUSE_LAYER_ID 3
 #define HID_INDICATORS_CAPS_LOCK (1 << 1)
 
 /* TrackPoint movement is already scaled by the peripheral before it reaches
@@ -47,7 +45,7 @@ static bool trackpoint_scroll_active(void) {
         return true;
     }
 
-    return trackpoint_scroll_pressed && zmk_keymap_highest_layer_active() == MOUSE_LAYER_ID;
+    return trackpoint_scroll_pressed;
 }
 
 static int16_t scroll_ticks(int16_t *remainder, int32_t value, int8_t direction) {
