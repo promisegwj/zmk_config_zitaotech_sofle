@@ -26,8 +26,8 @@ layers:
   - I
   - O
   - P
-  - ENTER
-  - CAPS
+  - \
+  - '&TdCapToLay'
   - A
   - S
   - D
@@ -40,7 +40,7 @@ layers:
   - K
   - L
   - ;
-  - \
+  - ''''
   - LSHFT
   - Z
   - X
@@ -56,18 +56,18 @@ layers:
   - ','
   - .
   - /
-  - '='
+  - DEL
   - LCTRL
   - LGUI
   - LALT
-  - SPACE
-  - LOWER
-  - LOWER
-  - SPACE
-  - RAISE
-  - '`'
-  - '-'
-  LOWER:
+  - {t: SPACE, h: FUNC}
+  - ENTER
+  - {t: '&mkp MB3', h: ENTER}
+  - {t: SPACE, h: FUNC}
+  - RALT
+  - RGUI
+  - RCTRL
+  FUNC:
   - '`'
   - F1
   - F2
@@ -78,129 +78,129 @@ layers:
   - MUTE
   - F6
   - F7
+  - F8
   - F9
   - F10
-  - '-'
   - DEL
-  - TAB
-  - {t: ▽, type: trans}
+  - (
+  - )
+  - HOME
   - UP
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
+  - END
   - OUT TOG
-  - F11
   - '7'
   - '8'
   - '9'
-  - HOME
-  - ENTER
-  - CAPS
+  - +
+  - F11
+  - PSCRN
+  - '['
+  - ']'
   - LEFT
   - DOWN
   - RIGHT
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
+  - Sft+D
   - '&mkp RCLK'
   - '&mkp RCLK'
-  - F12
   - '4'
   - '5'
   - '6'
-  - '?'
-  - '|'
-  - LSHFT
+  - '-'
+  - F12
+  - ENTER
+  - '{'
+  - '}'
+  - PG UP
   - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
+  - PG DN
   - RGB TOG
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - '&bl BL_DEC'
   - '&bl BL_INC'
-  - {t: ▽, type: trans}
   - '1'
   - '2'
   - '3'
-  - _
-  - +
+  - '='
+  - F13
+  - RSHFT
   - '&bootloader'
-  - LGUI
-  - LALT
-  - SPACE
-  - {t: LOWER, type: held}
-  - LOWER
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: MOUSE, type: held}
+  - ENTER
+  - ENTER
+  - MOUSE
   - '0'
-  - {t: MOUSE, h: toggle}
   - .
   - '&bootloader'
-  RAISE:
+  NUM:
   - '`'
-  - F1
-  - F2
-  - F3
-  - F4
-  - F5
-  - BT CLR
-  - MUTE
+  - '!'
+  - '@'
+  - '#'
+  - $
+  - '%'
   - ''
   - ''
-  - ''
-  - UP
-  - ''
+  - KP NUM
+  - KP SLASH
+  - KP ASTERISK
+  - KP MINUS
   - BSPC
-  - TAB
-  - {t: ▽, type: trans}
-  - UP
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - OUT TOG
+  - DEL
+  - ''
+  - ^
+  - '&'
+  - '*'
+  - (
+  - )
+  - KP 7
+  - KP 8
+  - KP 9
+  - KP PLUS
   - ''
   - ''
-  - LEFT
-  - DOWN
-  - RIGHT
-  - ''
-  - CAPS
-  - LEFT
-  - DOWN
-  - RIGHT
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - '&mkp RCLK'
-  - ''
-  - '&mkp LCLK'
-  - '&mkp RCLK'
+  - {t: QWERTY, h: toggle}
   - ''
   - ''
   - ''
+  - '['
+  - ']'
   - ''
+  - ''
+  - KP 4
+  - KP 5
+  - KP 6
+  - KP PLUS
+  - KP EQUAL
+  - KP COMMA
   - LSHFT
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - RGB TOG
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
   - ''
   - ''
-  - ''
-  - ''
-  - ''
-  - ''
-  - ''
-  - ''
-  - ''
-  - LGUI
-  - LALT
-  - SPACE
-  - LOWER
-  - LOWER
+  - UP
+  - '{'
+  - '}'
+  - PG DN
+  - PG UP
+  - '&mkp MB1'
   - '&mkp MB2'
-  - {type: held}
-  - ''
-  - ''
+  - KP 1
+  - KP 2
+  - KP 3
+  - KP ENTER
+  - HOME
+  - END
+  - LEFT
+  - DOWN
+  - RIGHT
+  - {t: SPACE, h: QWERTY}
+  - ENTER
+  - ENTER
+  - {t: SPACE, h: QWERTY}
+  - KP 0
+  - KP DOT
+  - KP ENTER
   MOUSE:
   - ESC
   - '1'
@@ -261,12 +261,10 @@ layers:
   - LCTRL
   - LGUI
   - LALT
-  - SPACE
-  - {t: QWERTY, h: toggle}
-  - {t: QWERTY, h: toggle}
-  - SPACE
-  - {t: QWERTY, h: toggle}
-  - ''
+  - {t: SPACE, type: held}
+  - '&mkp MB1'
+  - '&mkp MB3'
+  - '&mkp MB2'
+  - RALT
+  - RGUI
   - '&msc SCRL_DOWN'
-  RESERVE: ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-    '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
