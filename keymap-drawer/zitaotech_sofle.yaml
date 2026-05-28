@@ -261,7 +261,7 @@ layers:
   - LCTRL
   - LGUI
   - LALT
-  - {t: SPACE, type: held}
+  - {t: SPACE, h: FUNC, type: held}
   - '&mkp MB1'
   - '&mkp MB3'
   - '&mkp MB2'
