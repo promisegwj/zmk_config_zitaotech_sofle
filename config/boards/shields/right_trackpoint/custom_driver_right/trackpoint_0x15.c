@@ -22,6 +22,7 @@
 #include <zmk/events/hid_indicators_changed.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zmk/hid.h>
+#include <zmk/keymap.h>
 
 #include "custom_led.h"
 
@@ -82,6 +83,7 @@ static struct k_work_q tp_workq;
 /* ========= Watch Dog ========= */
 static uint32_t last_activity_time = 0;
 #define TRACKPOINT_WDT_TIMEOUT 200
+#define MOUSE_LAYER_ID 3
 /* ========= 全局状态 ========= */
 static bool scroll_key_pressed = false;
 static bool arrow_key_pressed = false;
@@ -117,10 +119,11 @@ static int special_key_listener_cb(const zmk_event_t *eh) {
         LOG_INF("space position=49 %s", arrow_key_pressed ? "PRESSED" : "RELEASED");
     }
 
-    // Scroll key (LT space thumbs)
-    if (ev->position == 59 || ev->position == 62) {
-        scroll_key_pressed = ev->state;
-        LOG_INF("scroll thumb position=%d %s", ev->position, scroll_key_pressed ? "PRESSED" : "RELEASED");
+    // Scroll key only acts while MOUSE is the highest active layer.
+    if (ev->position == 61) {
+        scroll_key_pressed = ev->state && zmk_keymap_highest_layer_active() == MOUSE_LAYER_ID;
+        LOG_INF("scroll mouse-layer position=%d %s", ev->position,
+                scroll_key_pressed ? "PRESSED" : "RELEASED");
     }
 
     // ★ NEW: Slow key
