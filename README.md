@@ -22,11 +22,13 @@ ZitaoTech Sofle 分体键盘的 ZMK 配置。
 
 ## 指点设备逻辑
 
-三个指点设备驱动共用同一套层编号假设：
+三个指点设备共用同一套层编号假设：
 
 - `config/boards/shields/right_trackpoint/custom_driver_right/trackpoint_0x15.c`
 - `config/boards/shields/left_bbtrackpad/custom_driver_left/a320.c`
 - `config/boards/shields/left_bbtrackball/custom_driver_left/bbtrackball_input_handler.c`
+
+注意：右手 `right_trackpoint` 是 split peripheral，不能直接查询 central 的 keymap 状态。它只上报指点输入；`config/boards/arm/zitaotech_sofle/custom_driver_left/trackpoint_scroll_processor.c` 在左手 central 侧负责判断 `MOUSE_layer` 和物理位 61，并把 TrackPoint X/Y 转成滚轮。
 
 物理位监听：
 
@@ -34,7 +36,7 @@ ZitaoTech Sofle 分体键盘的 ZMK 配置。
 | --- | --- |
 | 34 | 方向键模式监听 |
 | 36 | 慢速/精细模式监听，取决于具体设备支持 |
-| 61 | 滚动监听，并且只有 `zmk_keymap_highest_layer_active() == 3` 时生效 |
+| 61 | 滚动监听；右手 TrackPoint 在 central 侧确认最高层是 `MOUSE_layer` 后才生效 |
 
 物理位 60 不再参与滚动监听。在当前 MOUSE 层里，60 只保留普通鼠标键行为。
 
@@ -71,7 +73,7 @@ ZitaoTech Sofle 分体键盘的 ZMK 配置。
 - `QWERTY`、`FUNC`、`NUM`、`MOUSE` 每层都是 66 个 bindings；
 - `MOUSE_layer` 仍是第 4 个声明的层，也就是层编号 3；
 - 不要重新引入 `RES_layer`、`#define RES`、`&to 4`、`&mo 4` 或 `&lt 4`；
-- 三个指点设备驱动仍使用 `MOUSE_LAYER_ID 3`；
+- `MOUSE_LAYER_ID 3` 仍只指向 `MOUSE_layer`；右手 TrackPoint 的层判断必须留在 central 侧；
 - 滚动模式只监听物理位 61，不监听 60。
 
 ## 建议验收

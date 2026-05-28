@@ -1,0 +1,14 @@
+# Copyright (c) 2026 ZitaoTech
+# SPDX-License-Identifier: MIT
+
+description: Central-side TrackPoint scroll gate input processor
+
+compatible: "zitaotech,trackpoint-scroll-processor"
+
+properties:
+  "#input-processor-cells":
+    type: int
+    required: true
+    const: 0
+  track-remainders:
+    type: boolean
