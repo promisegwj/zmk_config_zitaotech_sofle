@@ -45,13 +45,16 @@ static struct k_work_q bbtrackball_work_q;
  * Config
  * ========================================================= */
 
-#define BASE_MOVE_PIXELS 3
-#define EXPONENTIAL_BASE 1.12f
-#define SPEED_SCALE 60.0f
+#define SCROLL_STEP 1
+#define SCROLL_ACCEL_BASE 1.08f
+#define SCROLL_ACCEL_SCALE 45.0f
+#define SCROLL_DELTA_MAX 8
 
 /* =========================================================
  * Runtime State
  * ========================================================= */
+
+static struct k_spinlock acc_lock;
 
 static int dx_acc = 0;
 static int dy_acc = 0;
@@ -105,6 +108,26 @@ static void report_scroll(const struct device *dev, int dx, int dy) {
     input_report_rel(dev, INPUT_REL_WHEEL, dy, true, K_NO_WAIT);
 }
 
+static int scroll_delta_from_interval(uint32_t delta_ms) {
+    if (delta_ms == 0) {
+        delta_ms = 1;
+    }
+
+    float speed_factor = SCROLL_ACCEL_SCALE / (float)delta_ms;
+    float mult = powf(SCROLL_ACCEL_BASE, speed_factor);
+    int delta = (int)roundf(SCROLL_STEP * mult);
+
+    if (delta < 1) {
+        return 1;
+    }
+
+    if (delta > SCROLL_DELTA_MAX) {
+        return SCROLL_DELTA_MAX;
+    }
+
+    return delta;
+}
+
 /* =========================================================
  * GPIO interrupt callback
  * ========================================================= */
@@ -125,25 +148,21 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
             if (val != d->last_state) {
 
                 uint32_t now = k_uptime_get_32();
-                uint32_t delta = now - d->last_time;
-                if (delta == 0)
-                    delta = 1;
+                uint32_t delta_ms = now - d->last_time;
+                int delta_px = scroll_delta_from_interval(delta_ms);
 
-                float speed_factor = SPEED_SCALE / (float)delta;
-                float mult = powf(EXPONENTIAL_BASE, speed_factor);
-                int delta_px = (int)roundf(BASE_MOVE_PIXELS * mult);
-
-                if (i < 2)
+                k_spinlock_key_t key = k_spin_lock(&acc_lock);
+                if (i < 2) {
                     dx_acc += d->sign * delta_px;
-                else
+                } else {
                     dy_acc += d->sign * delta_px;
+                }
+                k_spin_unlock(&acc_lock, key);
 
                 d->last_state = val;
                 d->last_time = now;
 
-                if (!k_work_is_pending(&data->work)) {
-                    k_work_submit_to_queue(&bbtrackball_work_q, &data->work); // ⭐修改点
-                }
+                k_work_submit_to_queue(&bbtrackball_work_q, &data->work);
             }
         }
     }
@@ -158,21 +177,24 @@ static void bbtrackball_work_handler(struct k_work *work) {
     struct bbtrackball_data *data = CONTAINER_OF(work, struct bbtrackball_data, work);
     const struct device *dev = data->dev;
 
-    uint32_t now = k_uptime_get_32();
+    while (1) {
+        k_spinlock_key_t key = k_spin_lock(&acc_lock);
 
-    int dx = dx_acc;
-    int dy = dy_acc;
+        int dx = dx_acc;
+        int dy = dy_acc;
 
-    dx_acc = 0;
-    dy_acc = 0;
+        dx_acc = 0;
+        dy_acc = 0;
 
-    if (dx == 0 && dy == 0) {
-        return;
+        k_spin_unlock(&acc_lock, key);
+
+        if (dx == 0 && dy == 0) {
+            return;
+        }
+
+        last_move_time = k_uptime_get_32();
+        report_scroll(dev, dx, dy);
     }
-
-    last_move_time = now;
-
-    report_scroll(dev, dx, dy);
 }
 
 /* =========================================================
