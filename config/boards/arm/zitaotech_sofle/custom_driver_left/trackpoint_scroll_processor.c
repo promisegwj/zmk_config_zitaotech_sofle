@@ -23,6 +23,7 @@
 LOG_MODULE_REGISTER(zitaotech_trackpoint_scroll, LOG_LEVEL_INF);
 
 #define TRACKPOINT_SCROLL_POSITION 61
+#define TRACKPOINT_SCROLL_HOLD_MS 300
 #define HID_INDICATORS_CAPS_LOCK (1 << 1)
 
 /* TrackPoint movement is already scaled by the peripheral before it reaches
@@ -38,6 +39,7 @@ struct trackpoint_scroll_processor_data {
 };
 
 static bool trackpoint_scroll_pressed;
+static uint32_t trackpoint_scroll_pressed_at;
 static zmk_hid_indicators_t current_indicators;
 
 static bool trackpoint_scroll_active(void) {
@@ -45,7 +47,11 @@ static bool trackpoint_scroll_active(void) {
         return true;
     }
 
-    return trackpoint_scroll_pressed;
+    if (!trackpoint_scroll_pressed) {
+        return false;
+    }
+
+    return (k_uptime_get_32() - trackpoint_scroll_pressed_at) >= TRACKPOINT_SCROLL_HOLD_MS;
 }
 
 static int16_t scroll_ticks(int16_t *remainder, int32_t value, int8_t direction) {
@@ -111,6 +117,9 @@ static int trackpoint_scroll_position_cb(const zmk_event_t *eh) {
 
     if (ev && ev->position == TRACKPOINT_SCROLL_POSITION) {
         trackpoint_scroll_pressed = ev->state;
+        if (trackpoint_scroll_pressed) {
+            trackpoint_scroll_pressed_at = k_uptime_get_32();
+        }
     }
 
     return ZMK_EV_EVENT_BUBBLE;

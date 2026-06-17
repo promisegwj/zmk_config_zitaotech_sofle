@@ -78,6 +78,7 @@ static struct k_work_q a320_workq;
 #define A320_PACKET_LEN 3
 
 #define SLOW_KEY_MULTIPLIER 0.5f
+#define SCROLL_KEY_HOLD_MS 300
 #define TOUCH_IDLE_TIMEOUT 50 // 30~80ms 看手感
 /* ========= Watch Dog ========= */
 static uint32_t last_activity_time = 0;
@@ -88,8 +89,17 @@ static bool arrow_key_pressed = false;
 static bool slow_key_pressed = false;
 static bool last_scroll_key_pressed = false; // ★ NEW
 static bool last_arrow_key_pressed = false;
+static uint32_t scroll_key_pressed_at = 0;
 uint32_t last_packet_time = 0;
 static bool touched = false;
+
+static bool scroll_key_active(void) {
+    if (!scroll_key_pressed) {
+        return false;
+    }
+
+    return (k_uptime_get_32() - scroll_key_pressed_at) >= SCROLL_KEY_HOLD_MS;
+}
 
 /* ==== HID indicators ==== */
 static zmk_hid_indicators_t current_indicators;
@@ -120,6 +130,9 @@ static int special_key_listener_cb(const zmk_event_t *eh) {
 
     if (ev->position == 61) {
         scroll_key_pressed = ev->state;
+        if (scroll_key_pressed) {
+            scroll_key_pressed_at = k_uptime_get_32();
+        }
         LOG_INF("scroll mouse-layer position=%d %s", ev->position,
                 scroll_key_pressed ? "PRESSED" : "RELEASED");
     }
@@ -268,7 +281,7 @@ static void a320_work_cb(struct k_work *work) {
         data->arrow_residue_x = 0;
         data->arrow_residue_y = 0;
 
-        last_scroll_key_pressed = scroll_key_pressed;
+        last_scroll_key_pressed = scroll_key_active();
         last_arrow_key_pressed = arrow_key_pressed;
 
         touched = false;
@@ -319,7 +332,8 @@ static void a320_work_cb(struct k_work *work) {
     dy = total_dy;
 
     /* ========= scroll / arrow mode 切换检测 ========= */
-    bool just_enter_scroll = scroll_key_pressed && !last_scroll_key_pressed;
+    bool scroll_active = scroll_key_active();
+    bool just_enter_scroll = scroll_active && !last_scroll_key_pressed;
     bool just_enter_arrow = arrow_key_pressed && !last_arrow_key_pressed;
     bool capslock = current_indicators & HID_INDICATORS_CAPS_LOCK;
 
@@ -345,7 +359,7 @@ static void a320_work_cb(struct k_work *work) {
         process_arrow_axis(dev, dx, &data->arrow_residue_x, INPUT_BTN_1, INPUT_BTN_0);
 
         process_arrow_axis(dev, dy, &data->arrow_residue_y, INPUT_BTN_3, INPUT_BTN_2);
-    } else if (scroll_key_pressed || capslock) {
+    } else if (scroll_active || capslock) {
 
         if (just_enter_scroll) {
             data->scroll_residue_x = dx * SCROLL_X_DIR;
@@ -383,7 +397,7 @@ static void a320_work_cb(struct k_work *work) {
         touched = false;
     }
 
-    last_scroll_key_pressed = scroll_key_pressed;
+    last_scroll_key_pressed = scroll_active;
     last_arrow_key_pressed = arrow_key_pressed;
     touched = false;
     data->last_packet_time = now;

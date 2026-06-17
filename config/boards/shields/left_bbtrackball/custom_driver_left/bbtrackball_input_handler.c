@@ -14,8 +14,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/input/input.h>
-
-#include <math.h>
+#include <zephyr/sys/atomic.h>
 
 LOG_MODULE_REGISTER(bbtrackball_input_handler, LOG_LEVEL_INF);
 
@@ -45,16 +44,23 @@ static struct k_work_q bbtrackball_work_q;
  * Config
  * ========================================================= */
 
-#define SCROLL_STEP 1
-#define SCROLL_ACCEL_BASE 1.08f
-#define SCROLL_ACCEL_SCALE 45.0f
-#define SCROLL_DELTA_MAX 8
+#define SCROLL_STEP_SLOW 2
+#define SCROLL_STEP_NORMAL 4
+#define SCROLL_STEP_FAST 7
+#define SCROLL_STEP_VERY_FAST 10
+
+#define SCROLL_INTERVAL_FAST_MS 5
+#define SCROLL_INTERVAL_NORMAL_MS 15
+#define SCROLL_INTERVAL_SLOW_MS 35
+
+#define SCROLL_REPORT_MAX 24
 
 /* =========================================================
  * Runtime State
  * ========================================================= */
 
 static struct k_spinlock acc_lock;
+static atomic_t scroll_work_active;
 
 static int dx_acc = 0;
 static int dy_acc = 0;
@@ -109,23 +115,50 @@ static void report_scroll(const struct device *dev, int dx, int dy) {
 }
 
 static int scroll_delta_from_interval(uint32_t delta_ms) {
-    if (delta_ms == 0) {
-        delta_ms = 1;
+    if (delta_ms <= SCROLL_INTERVAL_FAST_MS) {
+        return SCROLL_STEP_VERY_FAST;
     }
 
-    float speed_factor = SCROLL_ACCEL_SCALE / (float)delta_ms;
-    float mult = powf(SCROLL_ACCEL_BASE, speed_factor);
-    int delta = (int)roundf(SCROLL_STEP * mult);
-
-    if (delta < 1) {
-        return 1;
+    if (delta_ms <= SCROLL_INTERVAL_NORMAL_MS) {
+        return SCROLL_STEP_FAST;
     }
 
-    if (delta > SCROLL_DELTA_MAX) {
-        return SCROLL_DELTA_MAX;
+    if (delta_ms <= SCROLL_INTERVAL_SLOW_MS) {
+        return SCROLL_STEP_NORMAL;
     }
 
-    return delta;
+    return SCROLL_STEP_SLOW;
+}
+
+static int take_scroll_chunk(int *value) {
+    if (*value > SCROLL_REPORT_MAX) {
+        *value -= SCROLL_REPORT_MAX;
+        return SCROLL_REPORT_MAX;
+    }
+
+    if (*value < -SCROLL_REPORT_MAX) {
+        *value += SCROLL_REPORT_MAX;
+        return -SCROLL_REPORT_MAX;
+    }
+
+    int chunk = *value;
+    *value = 0;
+    return chunk;
+}
+
+static void report_scroll_chunked(const struct device *dev, int dx, int dy) {
+    while (dx != 0 || dy != 0) {
+        int chunk_x = take_scroll_chunk(&dx);
+        int chunk_y = take_scroll_chunk(&dy);
+
+        report_scroll(dev, chunk_x, chunk_y);
+    }
+}
+
+static void submit_scroll_work(struct bbtrackball_data *data) {
+    if (atomic_cas(&scroll_work_active, 0, 1)) {
+        k_work_submit_to_queue(&bbtrackball_work_q, &data->work);
+    }
 }
 
 /* =========================================================
@@ -162,7 +195,7 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 d->last_state = val;
                 d->last_time = now;
 
-                k_work_submit_to_queue(&bbtrackball_work_q, &data->work);
+                submit_scroll_work(data);
             }
         }
     }
@@ -178,22 +211,36 @@ static void bbtrackball_work_handler(struct k_work *work) {
     const struct device *dev = data->dev;
 
     while (1) {
+        while (1) {
+            k_spinlock_key_t key = k_spin_lock(&acc_lock);
+
+            int dx = dx_acc;
+            int dy = dy_acc;
+
+            dx_acc = 0;
+            dy_acc = 0;
+
+            k_spin_unlock(&acc_lock, key);
+
+            if (dx == 0 && dy == 0) {
+                break;
+            }
+
+            last_move_time = k_uptime_get_32();
+            report_scroll_chunked(dev, dx, dy);
+        }
+
+        atomic_set(&scroll_work_active, 0);
+
         k_spinlock_key_t key = k_spin_lock(&acc_lock);
-
-        int dx = dx_acc;
-        int dy = dy_acc;
-
-        dx_acc = 0;
-        dy_acc = 0;
-
+        bool has_pending = dx_acc != 0 || dy_acc != 0;
         k_spin_unlock(&acc_lock, key);
 
-        if (dx == 0 && dy == 0) {
+        if (!has_pending) {
             return;
         }
 
-        last_move_time = k_uptime_get_32();
-        report_scroll(dev, dx, dy);
+        atomic_set(&scroll_work_active, 1);
     }
 }
 
