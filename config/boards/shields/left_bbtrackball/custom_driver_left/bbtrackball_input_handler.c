@@ -49,6 +49,7 @@ static struct k_work_q bbtrackball_work_q;
 #define SCROLL_MEDIUM_BACKLOG_THRESHOLD 3
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
+#define VERTICAL_EDGE_DEBOUNCE_MS 2
 
 /* Diagnostic: disable vertical latch/repeat synthetic output. */
 #define BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT 1
@@ -240,9 +241,10 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
 
         if ((dev == d->gpio_dev) && (pins & BIT(d->pin))) {
 
-            int val = gpio_pin_get(dev, d->pin);
+            bool is_vertical = i >= 2;
+            int val = is_vertical ? 1 : gpio_pin_get(dev, d->pin);
 
-            if (val != d->last_state) {
+            if (is_vertical || val != d->last_state) {
 
                 uint32_t now = k_uptime_get_32();
                 uint32_t delta_ms = now - d->last_time;
@@ -254,6 +256,10 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 bool log_auto_enter = false;
                 bool log_auto_stop = false;
 #endif
+
+                if (is_vertical && delta_ms < VERTICAL_EDGE_DEBOUNCE_MS) {
+                    continue;
+                }
 
                 k_spinlock_key_t key = k_spin_lock(&acc_lock);
                 if (i < 2) {
@@ -300,7 +306,9 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 }
 #endif
 
-                d->last_state = val;
+                if (!is_vertical) {
+                    d->last_state = val;
+                }
                 d->last_time = now;
 
                 submit_scroll_work(data);
@@ -402,8 +410,15 @@ static int bbtrackball_init(const struct device *dev) {
     for (size_t i = 0; i < ARRAY_SIZE(dir_inputs); i++) {
 
         DirInput *d = &dir_inputs[i];
+        bool is_vertical = i >= 2;
+        gpio_flags_t input_flags = GPIO_INPUT | GPIO_PULL_UP;
+        gpio_flags_t interrupt_flags = is_vertical ? GPIO_INT_EDGE_TO_ACTIVE : GPIO_INT_EDGE_BOTH;
 
-        gpio_pin_configure(d->gpio_dev, d->pin, GPIO_INPUT | GPIO_PULL_UP);
+        if (is_vertical) {
+            input_flags |= GPIO_ACTIVE_LOW;
+        }
+
+        gpio_pin_configure(d->gpio_dev, d->pin, input_flags);
 
         d->last_state = gpio_pin_get(d->gpio_dev, d->pin);
         d->last_time = k_uptime_get_32();
@@ -417,7 +432,7 @@ static int bbtrackball_init(const struct device *dev) {
         gpio_init_callback(&data->gpio_cbs[i].cb, dir_edge_cb, BIT(d->pin));
         gpio_add_callback(d->gpio_dev, &data->gpio_cbs[i].cb);
 
-        gpio_pin_interrupt_configure(d->gpio_dev, d->pin, GPIO_INT_EDGE_BOTH);
+        gpio_pin_interrupt_configure(d->gpio_dev, d->pin, interrupt_flags);
     }
 
     return 0;
