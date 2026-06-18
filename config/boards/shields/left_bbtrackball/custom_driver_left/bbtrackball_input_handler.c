@@ -49,22 +49,8 @@ static struct k_work_q bbtrackball_work_q;
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
 
-#define AUTO_SCROLL_TRIGGER_EDGES 5
-#define AUTO_SCROLL_TRIGGER_WINDOW_MS 360
-/*
- * Auto-scroll is a gap filler, not a free-running motor. Keep real edges fast,
- * but stop the latch shortly after input goes quiet so browsers do not coalesce
- * a long tail of repeat reports into one large page jump.
- */
-#define AUTO_SCROLL_IDLE_TIMEOUT_MS 120
-#define AUTO_SCROLL_REPEAT_NUMERATOR 1
-#define AUTO_SCROLL_REPEAT_DENOMINATOR 2
-#define AUTO_SCROLL_REPEAT_STEP 1
-
 #define BBTRACKBALL_EDGE_LOG_LIMIT 8
 #define BBTRACKBALL_REPORT_LOG_LIMIT 12
-#define BBTRACKBALL_AUTO_LOG_LIMIT 4
-#define BBTRACKBALL_AUTO_REPORT_LOG_LIMIT 6
 
 /* =========================================================
  * Runtime State
@@ -75,16 +61,6 @@ static atomic_t scroll_work_active;
 
 static int dx_acc = 0;
 static int dy_acc = 0;
-
-static int auto_scroll_dir = 0;
-static int vertical_streak_dir = 0;
-static uint8_t vertical_streak_count = 0;
-static uint32_t vertical_streak_last_edge_time = 0;
-static uint32_t auto_scroll_last_input_time = 0;
-static uint8_t auto_scroll_repeat_accum = 0;
-static uint8_t auto_scroll_enter_log_count = 0;
-static uint8_t auto_scroll_stop_log_count = 0;
-static uint8_t auto_scroll_repeat_log_count = 0;
 
 static uint32_t last_move_time = 0;
 
@@ -177,58 +153,6 @@ static int take_scroll_tick_delta(int *value) {
     return 0;
 }
 
-static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entered,
-                                        bool *auto_stopped) {
-    *auto_entered = false;
-    *auto_stopped = false;
-
-    if (auto_scroll_dir != 0) {
-        auto_scroll_last_input_time = now;
-
-        if (dir == -auto_scroll_dir) {
-            auto_scroll_dir = 0;
-            vertical_streak_dir = dir;
-            vertical_streak_count = 1;
-            vertical_streak_last_edge_time = now;
-            auto_scroll_repeat_accum = 0;
-            *auto_stopped = true;
-            return true;
-        }
-
-        /*
-         * Keep real same-direction edges while latched. The auto-repeat path
-         * only fills quiet gaps, so diagonal up/right rolls do not lose their
-         * vertical component after the latch engages.
-         */
-        vertical_streak_dir = dir;
-        vertical_streak_count = 0;
-        vertical_streak_last_edge_time = now;
-        return true;
-    }
-
-    if (vertical_streak_dir == dir &&
-        (now - vertical_streak_last_edge_time) <= AUTO_SCROLL_TRIGGER_WINDOW_MS) {
-        if (vertical_streak_count < AUTO_SCROLL_TRIGGER_EDGES) {
-            vertical_streak_count++;
-        }
-    } else {
-        vertical_streak_dir = dir;
-        vertical_streak_count = 1;
-    }
-
-    vertical_streak_last_edge_time = now;
-
-    if (vertical_streak_count >= AUTO_SCROLL_TRIGGER_EDGES) {
-        auto_scroll_dir = dir;
-        vertical_streak_count = 0;
-        auto_scroll_repeat_accum = 0;
-        auto_scroll_last_input_time = now;
-        *auto_entered = true;
-    }
-
-    return true;
-}
-
 /* =========================================================
  * GPIO interrupt callback
  * ========================================================= */
@@ -251,49 +175,20 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 uint32_t now = k_uptime_get_32();
                 uint32_t delta_ms = now - d->last_time;
                 int signed_impulse = d->sign * SCROLL_EDGE_IMPULSE;
-                bool apply_impulse = true;
-                bool auto_entered = false;
-                bool auto_stopped = false;
-                bool log_auto_enter = false;
-                bool log_auto_stop = false;
 
                 k_spinlock_key_t key = k_spin_lock(&acc_lock);
                 if (i < 2) {
                     dx_acc += signed_impulse;
                 } else {
-                    apply_impulse = process_vertical_auto_latch(d->sign, now, &auto_entered,
-                                                                &auto_stopped);
-                    if (apply_impulse) {
-                        dy_acc += signed_impulse;
-                    }
-
-                    if (auto_entered &&
-                        auto_scroll_enter_log_count < BBTRACKBALL_AUTO_LOG_LIMIT) {
-                        auto_scroll_enter_log_count++;
-                        log_auto_enter = true;
-                    }
-
-                    if (auto_stopped && auto_scroll_stop_log_count < BBTRACKBALL_AUTO_LOG_LIMIT) {
-                        auto_scroll_stop_log_count++;
-                        log_auto_stop = true;
-                    }
+                    dy_acc += signed_impulse;
                 }
                 k_spin_unlock(&acc_lock, key);
 
                 if (d->edge_log_count < BBTRACKBALL_EDGE_LOG_LIMIT) {
-                    LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d delta_ms=%u impulse=%d signed=%d applied=%d",
+                    LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d delta_ms=%u impulse=%d signed=%d",
                             d->name, d->gpio_dev->name, d->pin, val, delta_ms, SCROLL_EDGE_IMPULSE,
-                            signed_impulse, apply_impulse ? 1 : 0);
+                            signed_impulse);
                     d->edge_log_count++;
-                }
-
-                if (log_auto_enter) {
-                    LOG_INF("BBtrackball auto-scroll enter dir=%d trigger_edges=%d window_ms=%d",
-                            d->sign, AUTO_SCROLL_TRIGGER_EDGES, AUTO_SCROLL_TRIGGER_WINDOW_MS);
-                }
-
-                if (log_auto_stop) {
-                    LOG_INF("BBtrackball auto-scroll stop dir=%d by=%s", -d->sign, d->name);
                 }
 
                 d->last_state = val;
@@ -321,44 +216,8 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         int dx = take_scroll_tick_delta(&dx_acc);
         int dy = take_scroll_tick_delta(&dy_acc);
-        bool auto_active = auto_scroll_dir != 0;
-        bool log_auto_report = false;
-        bool log_auto_timeout = false;
-
-        if (auto_active && (k_uptime_get_32() - auto_scroll_last_input_time) >
-                               AUTO_SCROLL_IDLE_TIMEOUT_MS) {
-            auto_scroll_dir = 0;
-            auto_scroll_repeat_accum = 0;
-            auto_active = false;
-            if (auto_scroll_stop_log_count < BBTRACKBALL_AUTO_LOG_LIMIT) {
-                auto_scroll_stop_log_count++;
-                log_auto_timeout = true;
-            }
-        }
-
-        if (dy == 0 && auto_active) {
-            auto_scroll_repeat_accum += AUTO_SCROLL_REPEAT_NUMERATOR;
-            if (auto_scroll_repeat_accum >= AUTO_SCROLL_REPEAT_DENOMINATOR) {
-                auto_scroll_repeat_accum -= AUTO_SCROLL_REPEAT_DENOMINATOR;
-                dy = auto_scroll_dir * AUTO_SCROLL_REPEAT_STEP;
-
-                if (auto_scroll_repeat_log_count < BBTRACKBALL_AUTO_REPORT_LOG_LIMIT) {
-                    auto_scroll_repeat_log_count++;
-                    log_auto_report = true;
-                }
-            }
-        }
 
         k_spin_unlock(&acc_lock, key);
-
-        if (log_auto_timeout) {
-            LOG_INF("BBtrackball auto-scroll timeout idle_ms=%d",
-                    AUTO_SCROLL_IDLE_TIMEOUT_MS);
-        }
-
-        if (log_auto_report) {
-            LOG_INF("BBtrackball auto-scroll repeat dy=%d", dy);
-        }
 
         if (dx != 0 || dy != 0) {
             last_move_time = k_uptime_get_32();
@@ -366,14 +225,10 @@ static void bbtrackball_work_handler(struct k_work *work) {
             continue;
         }
 
-        if (auto_active) {
-            continue;
-        }
-
         atomic_set(&scroll_work_active, 0);
 
         key = k_spin_lock(&acc_lock);
-        bool has_pending = dx_acc != 0 || dy_acc != 0 || auto_scroll_dir != 0;
+        bool has_pending = dx_acc != 0 || dy_acc != 0;
         k_spin_unlock(&acc_lock, key);
 
         if (!has_pending) {
