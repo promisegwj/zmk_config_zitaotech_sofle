@@ -50,6 +50,9 @@ static struct k_work_q bbtrackball_work_q;
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
 
+/* Diagnostic: disable vertical latch/repeat synthetic output. */
+#define BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT 1
+
 #define AUTO_SCROLL_TRIGGER_EDGES 8
 #define AUTO_SCROLL_TRIGGER_WINDOW_MS 280
 #define AUTO_SCROLL_REPEAT_DIVISOR 2
@@ -70,6 +73,7 @@ static atomic_t scroll_work_active;
 static int dx_acc = 0;
 static int dy_acc = 0;
 
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static int auto_scroll_dir = 0;
 static int vertical_streak_dir = 0;
 static uint8_t vertical_streak_count = 0;
@@ -78,6 +82,7 @@ static uint8_t auto_scroll_repeat_divider = 0;
 static uint8_t auto_scroll_enter_log_count = 0;
 static uint8_t auto_scroll_stop_log_count = 0;
 static uint8_t auto_scroll_repeat_log_count = 0;
+#endif
 
 static uint32_t last_move_time = 0;
 
@@ -173,6 +178,7 @@ static int take_scroll_tick_delta(int *value) {
     return 0;
 }
 
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entered,
                                         bool *auto_stopped) {
     *auto_entered = false;
@@ -217,6 +223,7 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
 
     return true;
 }
+#endif
 
 /* =========================================================
  * GPIO interrupt callback
@@ -241,15 +248,20 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 uint32_t delta_ms = now - d->last_time;
                 int signed_impulse = d->sign * SCROLL_EDGE_IMPULSE;
                 bool apply_impulse = true;
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
                 bool auto_entered = false;
                 bool auto_stopped = false;
                 bool log_auto_enter = false;
                 bool log_auto_stop = false;
+#endif
 
                 k_spinlock_key_t key = k_spin_lock(&acc_lock);
                 if (i < 2) {
                     dx_acc += signed_impulse;
                 } else {
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+                    dy_acc += signed_impulse;
+#else
                     apply_impulse = process_vertical_auto_latch(d->sign, now, &auto_entered,
                                                                 &auto_stopped);
                     if (apply_impulse) {
@@ -266,6 +278,7 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                         auto_scroll_stop_log_count++;
                         log_auto_stop = true;
                     }
+#endif
                 }
                 k_spin_unlock(&acc_lock, key);
 
@@ -276,6 +289,7 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                     d->edge_log_count++;
                 }
 
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
                 if (log_auto_enter) {
                     LOG_INF("BBtrackball auto-scroll enter dir=%d trigger_edges=%d window_ms=%d",
                             d->sign, AUTO_SCROLL_TRIGGER_EDGES, AUTO_SCROLL_TRIGGER_WINDOW_MS);
@@ -284,6 +298,7 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 if (log_auto_stop) {
                     LOG_INF("BBtrackball auto-scroll stop dir=%d by=%s", -d->sign, d->name);
                 }
+#endif
 
                 d->last_state = val;
                 d->last_time = now;
@@ -310,6 +325,7 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         int dx = take_scroll_tick_delta(&dx_acc);
         int dy = take_scroll_tick_delta(&dy_acc);
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         bool auto_active = auto_scroll_dir != 0;
         bool log_auto_report = false;
 
@@ -325,12 +341,15 @@ static void bbtrackball_work_handler(struct k_work *work) {
                 }
             }
         }
+#endif
 
         k_spin_unlock(&acc_lock, key);
 
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         if (log_auto_report) {
             LOG_INF("BBtrackball auto-scroll repeat dy=%d", dy);
         }
+#endif
 
         if (dx != 0 || dy != 0) {
             last_move_time = k_uptime_get_32();
@@ -338,14 +357,19 @@ static void bbtrackball_work_handler(struct k_work *work) {
             continue;
         }
 
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         if (auto_active) {
             continue;
         }
+#endif
 
         atomic_set(&scroll_work_active, 0);
 
         key = k_spin_lock(&acc_lock);
-        bool has_pending = dx_acc != 0 || dy_acc != 0 || auto_scroll_dir != 0;
+        bool has_pending = dx_acc != 0 || dy_acc != 0;
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+        has_pending = has_pending || auto_scroll_dir != 0;
+#endif
         k_spin_unlock(&acc_lock, key);
 
         if (!has_pending) {
