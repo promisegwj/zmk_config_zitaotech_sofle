@@ -50,6 +50,13 @@ static struct k_work_q bbtrackball_work_q;
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
 #define VERTICAL_EDGE_DEBOUNCE_MS 2
+#define VERTICAL_TAIL_BASE_MS 96
+#define VERTICAL_TAIL_EXTEND_MS 16
+#define VERTICAL_TAIL_MAX_MS 160
+#define VERTICAL_TAIL_INITIAL_BUDGET 2
+#define VERTICAL_TAIL_ADD_BUDGET 2
+#define VERTICAL_TAIL_MAX_BUDGET 6
+#define VERTICAL_TAIL_PUMP_DIVISOR 2
 
 /* Diagnostic: disable vertical latch/repeat synthetic output. */
 #define BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT 1
@@ -73,6 +80,10 @@ static atomic_t scroll_work_active;
 
 static int dx_acc = 0;
 static int dy_acc = 0;
+static int vertical_tail_dir = 0;
+static uint8_t vertical_tail_budget = 0;
+static uint8_t vertical_tail_pump_divider = 0;
+static uint32_t vertical_tail_until = 0;
 
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static int auto_scroll_dir = 0;
@@ -179,6 +190,63 @@ static int take_scroll_tick_delta(int *value) {
     return 0;
 }
 
+static bool vertical_tail_is_live(uint32_t now) {
+    return vertical_tail_dir != 0 && (int32_t)(vertical_tail_until - now) > 0;
+}
+
+static void clear_vertical_tail(void) {
+    vertical_tail_dir = 0;
+    vertical_tail_budget = 0;
+    vertical_tail_pump_divider = 0;
+    vertical_tail_until = 0;
+}
+
+static void refresh_vertical_tail(int dir, uint32_t now) {
+    if (vertical_tail_dir != dir || !vertical_tail_is_live(now)) {
+        vertical_tail_dir = dir;
+        vertical_tail_budget = VERTICAL_TAIL_INITIAL_BUDGET;
+    } else {
+        uint8_t boosted = vertical_tail_budget + VERTICAL_TAIL_ADD_BUDGET;
+        vertical_tail_budget =
+            boosted > VERTICAL_TAIL_MAX_BUDGET ? VERTICAL_TAIL_MAX_BUDGET : boosted;
+    }
+
+    vertical_tail_pump_divider = 0;
+
+    uint32_t tail_ms = VERTICAL_TAIL_BASE_MS;
+    if (vertical_tail_budget > VERTICAL_TAIL_INITIAL_BUDGET) {
+        tail_ms += (vertical_tail_budget - VERTICAL_TAIL_INITIAL_BUDGET) *
+                   VERTICAL_TAIL_EXTEND_MS;
+    }
+
+    if (tail_ms > VERTICAL_TAIL_MAX_MS) {
+        tail_ms = VERTICAL_TAIL_MAX_MS;
+    }
+
+    vertical_tail_until = now + tail_ms;
+}
+
+static int take_vertical_tail_delta(uint32_t now) {
+    if (!vertical_tail_is_live(now)) {
+        clear_vertical_tail();
+        return 0;
+    }
+
+    if (vertical_tail_budget == 0) {
+        return 0;
+    }
+
+    vertical_tail_pump_divider++;
+    if (vertical_tail_pump_divider < VERTICAL_TAIL_PUMP_DIVISOR) {
+        return 0;
+    }
+
+    vertical_tail_pump_divider = 0;
+    vertical_tail_budget--;
+
+    return vertical_tail_dir;
+}
+
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entered,
                                         bool *auto_stopped) {
@@ -266,7 +334,14 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                     dx_acc += signed_impulse;
                 } else {
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+                    if ((vertical_tail_dir != 0 && vertical_tail_dir != d->sign) ||
+                        (dy_acc != 0 && ((dy_acc > 0) != (d->sign > 0)))) {
+                        clear_vertical_tail();
+                        dy_acc = 0;
+                    }
+
                     dy_acc += signed_impulse;
+                    refresh_vertical_tail(d->sign, now);
 #else
                     apply_impulse = process_vertical_auto_latch(d->sign, now, &auto_entered,
                                                                 &auto_stopped);
@@ -333,6 +408,12 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         int dx = take_scroll_tick_delta(&dx_acc);
         int dy = take_scroll_tick_delta(&dy_acc);
+        uint32_t now = k_uptime_get_32();
+        bool tail_active = vertical_tail_is_live(now);
+
+        if (dy == 0 && tail_active) {
+            dy = take_vertical_tail_delta(now);
+        }
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         bool auto_active = auto_scroll_dir != 0;
         bool log_auto_report = false;
@@ -360,7 +441,7 @@ static void bbtrackball_work_handler(struct k_work *work) {
 #endif
 
         if (dx != 0 || dy != 0) {
-            last_move_time = k_uptime_get_32();
+            last_move_time = now;
             report_scroll(dev, dx, dy);
             continue;
         }
@@ -375,6 +456,7 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         key = k_spin_lock(&acc_lock);
         bool has_pending = dx_acc != 0 || dy_acc != 0;
+        has_pending = has_pending || vertical_tail_is_live(k_uptime_get_32());
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         has_pending = has_pending || auto_scroll_dir != 0;
 #endif
