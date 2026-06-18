@@ -44,10 +44,10 @@ static struct k_work_q bbtrackball_work_q;
  * Config
  * ========================================================= */
 
-#define SCROLL_EDGE_IMPULSE 3
-#define SCROLL_DRAIN_INTERVAL_MS 8
-#define SCROLL_FAST_BACKLOG_THRESHOLD 5
-#define SCROLL_REPORT_MAX_PER_TICK 3
+#define SCROLL_EDGE_IMPULSE 1
+#define SCROLL_DRAIN_INTERVAL_MS 6
+#define SCROLL_FAST_BACKLOG_THRESHOLD 6
+#define SCROLL_REPORT_MAX_PER_TICK 2
 
 #define BBTRACKBALL_EDGE_LOG_LIMIT 8
 #define BBTRACKBALL_REPORT_LOG_LIMIT 12
@@ -272,7 +272,7 @@ static int bbtrackball_init(const struct device *dev) {
         gpio_init_callback(&data->gpio_cbs[i].cb, dir_edge_cb, BIT(d->pin));
         gpio_add_callback(d->gpio_dev, &data->gpio_cbs[i].cb);
 
-        gpio_pin_interrupt_configure(d->gpio_dev, d->pin, GPIO_INT_EDGE_TO_ACTIVE);
+        gpio_pin_interrupt_configure(d->gpio_dev, d->pin, GPIO_INT_EDGE_BOTH);
     }
 
     return 0;
