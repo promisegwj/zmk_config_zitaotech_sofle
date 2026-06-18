@@ -57,7 +57,9 @@ static struct k_work_q bbtrackball_work_q;
 #define VERTICAL_TAIL_ADD_BUDGET 2
 #define VERTICAL_TAIL_MAX_BUDGET 6
 #define VERTICAL_TAIL_PUMP_DIVISOR 2
-#define VERTICAL_REAL_QUEUE_SIZE 16
+#define VERTICAL_TAIL_TRIGGER_WINDOW_MS 200
+#define VERTICAL_TAIL_TRIGGER_EDGES 2
+#define SCROLL_REAL_QUEUE_SIZE 32
 
 /* Diagnostic: disable vertical latch/repeat synthetic output. */
 #define BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT 1
@@ -79,8 +81,17 @@ static struct k_work_q bbtrackball_work_q;
 static struct k_spinlock acc_lock;
 static atomic_t scroll_work_active;
 
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+typedef struct {
+    int values[SCROLL_REAL_QUEUE_SIZE];
+    uint8_t head;
+    uint8_t count;
+} ScrollQueue;
+
+static ScrollQueue horizontal_real_queue;
+static ScrollQueue vertical_real_queue;
+#else
 static int dx_acc = 0;
-#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static int dy_acc = 0;
 #endif
 static int vertical_tail_dir = 0;
@@ -89,9 +100,9 @@ static uint8_t vertical_tail_pump_divider = 0;
 static uint32_t vertical_tail_until = 0;
 
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-static int vertical_real_queue[VERTICAL_REAL_QUEUE_SIZE];
-static uint8_t vertical_real_queue_head = 0;
-static uint8_t vertical_real_queue_count = 0;
+static int vertical_tail_candidate_dir = 0;
+static uint8_t vertical_tail_candidate_count = 0;
+static uint32_t vertical_tail_candidate_last_time = 0;
 #endif
 
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
@@ -200,42 +211,57 @@ static int take_scroll_tick_delta(int *value) {
 }
 
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-static bool vertical_real_queue_has_pending(void) {
-    return vertical_real_queue_count > 0;
+static bool scroll_queue_has_pending(const ScrollQueue *queue) {
+    return queue->count > 0;
 }
 
-static void enqueue_vertical_real_delta(int delta) {
-    if (vertical_real_queue_count == ARRAY_SIZE(vertical_real_queue)) {
-        /* Bound stale backlog: keep newest real edges if interrupts outpace draining. */
-        vertical_real_queue_head =
-            (vertical_real_queue_head + 1) % ARRAY_SIZE(vertical_real_queue);
-        vertical_real_queue_count--;
+static bool same_scroll_direction(int a, int b) {
+    return (a > 0 && b > 0) || (a < 0 && b < 0);
+}
+
+static void enqueue_scroll_delta(ScrollQueue *queue, int delta) {
+    if (queue->count > 0) {
+        uint8_t tail = (queue->head + queue->count - 1) % ARRAY_SIZE(queue->values);
+        if (same_scroll_direction(queue->values[tail], delta)) {
+            queue->values[tail] += delta;
+            return;
+        }
     }
 
-    uint8_t tail =
-        (vertical_real_queue_head + vertical_real_queue_count) % ARRAY_SIZE(vertical_real_queue);
-    vertical_real_queue[tail] = delta;
-    vertical_real_queue_count++;
+    if (queue->count == ARRAY_SIZE(queue->values)) {
+        /* Bound stale backlog while preserving the newest direction changes. */
+        queue->head = (queue->head + 1) % ARRAY_SIZE(queue->values);
+        queue->count--;
+    }
+
+    uint8_t tail = (queue->head + queue->count) % ARRAY_SIZE(queue->values);
+    queue->values[tail] = delta;
+    queue->count++;
 }
 
-static int take_vertical_real_delta(void) {
-    if (!vertical_real_queue_has_pending()) {
+static int take_scroll_queue_delta(ScrollQueue *queue) {
+    if (!scroll_queue_has_pending(queue)) {
         return 0;
     }
 
-    int *front = &vertical_real_queue[vertical_real_queue_head];
+    int *front = &queue->values[queue->head];
     int delta = take_scroll_tick_delta(front);
 
     if (*front == 0) {
-        vertical_real_queue_head =
-            (vertical_real_queue_head + 1) % ARRAY_SIZE(vertical_real_queue);
-        vertical_real_queue_count--;
-        if (vertical_real_queue_count == 0) {
-            vertical_real_queue_head = 0;
+        queue->head = (queue->head + 1) % ARRAY_SIZE(queue->values);
+        queue->count--;
+        if (queue->count == 0) {
+            queue->head = 0;
         }
     }
 
     return delta;
+}
+
+static void reset_vertical_tail_candidate(void) {
+    vertical_tail_candidate_dir = 0;
+    vertical_tail_candidate_count = 0;
+    vertical_tail_candidate_last_time = 0;
 }
 #endif
 
@@ -274,6 +300,30 @@ static void refresh_vertical_tail(int dir, uint32_t now) {
 
     vertical_tail_until = now + tail_ms;
 }
+
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+static bool should_refresh_vertical_tail(int dir, uint32_t now) {
+    if ((vertical_tail_dir != 0 && dir == -vertical_tail_dir) ||
+        (vertical_tail_candidate_dir != 0 && dir == -vertical_tail_candidate_dir)) {
+        clear_vertical_tail();
+        reset_vertical_tail_candidate();
+    }
+
+    if (vertical_tail_candidate_dir == dir &&
+        (now - vertical_tail_candidate_last_time) <= VERTICAL_TAIL_TRIGGER_WINDOW_MS) {
+        if (vertical_tail_candidate_count < VERTICAL_TAIL_TRIGGER_EDGES) {
+            vertical_tail_candidate_count++;
+        }
+    } else {
+        vertical_tail_candidate_dir = dir;
+        vertical_tail_candidate_count = 1;
+    }
+
+    vertical_tail_candidate_last_time = now;
+
+    return vertical_tail_candidate_count >= VERTICAL_TAIL_TRIGGER_EDGES;
+}
+#endif
 
 static int take_vertical_tail_delta(uint32_t now) {
     if (!vertical_tail_is_live(now)) {
@@ -380,15 +430,17 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
 
                 k_spinlock_key_t key = k_spin_lock(&acc_lock);
                 if (i < 2) {
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+                    enqueue_scroll_delta(&horizontal_real_queue, signed_impulse);
+#else
                     dx_acc += signed_impulse;
+#endif
                 } else {
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-                    if (vertical_tail_dir != 0 && vertical_tail_dir != d->sign) {
-                        clear_vertical_tail();
+                    enqueue_scroll_delta(&vertical_real_queue, signed_impulse);
+                    if (should_refresh_vertical_tail(d->sign, now)) {
+                        refresh_vertical_tail(d->sign, now);
                     }
-
-                    enqueue_vertical_real_delta(signed_impulse);
-                    refresh_vertical_tail(d->sign, now);
 #else
                     apply_impulse = process_vertical_auto_latch(d->sign, now, &auto_entered,
                                                                 &auto_stopped);
@@ -453,10 +505,11 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         k_spinlock_key_t key = k_spin_lock(&acc_lock);
 
-        int dx = take_scroll_tick_delta(&dx_acc);
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-        int dy = take_vertical_real_delta();
+        int dx = take_scroll_queue_delta(&horizontal_real_queue);
+        int dy = take_scroll_queue_delta(&vertical_real_queue);
 #else
+        int dx = take_scroll_tick_delta(&dx_acc);
         int dy = take_scroll_tick_delta(&dy_acc);
 #endif
         uint32_t now = k_uptime_get_32();
@@ -464,7 +517,7 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         if (dy == 0 && tail_active
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-            && !vertical_real_queue_has_pending()
+            && !scroll_queue_has_pending(&vertical_real_queue)
 #endif
         ) {
             dy = take_vertical_tail_delta(now);
@@ -511,7 +564,8 @@ static void bbtrackball_work_handler(struct k_work *work) {
 
         key = k_spin_lock(&acc_lock);
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-        bool has_pending = dx_acc != 0 || vertical_real_queue_has_pending();
+        bool has_pending = scroll_queue_has_pending(&horizontal_real_queue) ||
+                           scroll_queue_has_pending(&vertical_real_queue);
 #else
         bool has_pending = dx_acc != 0 || dy_acc != 0;
 #endif
