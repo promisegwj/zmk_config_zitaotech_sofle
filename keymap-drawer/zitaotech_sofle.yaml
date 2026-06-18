@@ -181,8 +181,8 @@ layers:
   - UP
   - '{'
   - '}'
-  - PG DN
-  - PG UP
+  - BT NXT
+  - BT PRV
   - '&mkp MB1'
   - '&mkp MB2'
   - KP 1
@@ -238,7 +238,7 @@ layers:
   - '&mkp LCLK'
   - ''
   - '&mkp LCLK'
-  - ''
+  - '&mkp RCLK'
   - ''
   - ''
   - ''
@@ -248,8 +248,8 @@ layers:
   - C
   - V
   - B
-  - '&msc SCRL_DOWN'
-  - '&msc SCRL_UP'
+  - BT NXT
+  - BT PRV
   - ''
   - ''
   - ''

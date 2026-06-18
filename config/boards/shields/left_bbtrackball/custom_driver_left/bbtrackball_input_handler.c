@@ -44,14 +44,16 @@ static struct k_work_q bbtrackball_work_q;
  * Config
  * ========================================================= */
 
-#define SCROLL_EDGE_IMPULSE 2
+#define SCROLL_EDGE_IMPULSE 3
 #define SCROLL_DRAIN_INTERVAL_MS 8
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
 
-#define AUTO_SCROLL_TRIGGER_EDGES 8
-#define AUTO_SCROLL_TRIGGER_WINDOW_MS 280
-#define AUTO_SCROLL_REPEAT_DIVISOR 2
+#define AUTO_SCROLL_TRIGGER_EDGES 5
+#define AUTO_SCROLL_TRIGGER_WINDOW_MS 360
+/* 3/4 work cycles gives 1.5x the old 1/2 repeat cadence without larger jumps. */
+#define AUTO_SCROLL_REPEAT_NUMERATOR 3
+#define AUTO_SCROLL_REPEAT_DENOMINATOR 4
 #define AUTO_SCROLL_REPEAT_STEP 1
 
 #define BBTRACKBALL_EDGE_LOG_LIMIT 8
@@ -73,7 +75,7 @@ static int auto_scroll_dir = 0;
 static int vertical_streak_dir = 0;
 static uint8_t vertical_streak_count = 0;
 static uint32_t vertical_streak_last_time = 0;
-static uint8_t auto_scroll_repeat_divider = 0;
+static uint8_t auto_scroll_repeat_accum = 0;
 static uint8_t auto_scroll_enter_log_count = 0;
 static uint8_t auto_scroll_stop_log_count = 0;
 static uint8_t auto_scroll_repeat_log_count = 0;
@@ -180,7 +182,7 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
             vertical_streak_dir = 0;
             vertical_streak_count = 0;
             vertical_streak_last_time = now;
-            auto_scroll_repeat_divider = 0;
+            auto_scroll_repeat_accum = 0;
             *auto_stopped = true;
             return false;
         }
@@ -206,7 +208,7 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
     if (vertical_streak_count >= AUTO_SCROLL_TRIGGER_EDGES) {
         auto_scroll_dir = dir;
         vertical_streak_count = 0;
-        auto_scroll_repeat_divider = 0;
+        auto_scroll_repeat_accum = 0;
         *auto_entered = true;
     }
 
@@ -309,9 +311,9 @@ static void bbtrackball_work_handler(struct k_work *work) {
         bool log_auto_report = false;
 
         if (dy == 0 && auto_active) {
-            auto_scroll_repeat_divider++;
-            if (auto_scroll_repeat_divider >= AUTO_SCROLL_REPEAT_DIVISOR) {
-                auto_scroll_repeat_divider = 0;
+            auto_scroll_repeat_accum += AUTO_SCROLL_REPEAT_NUMERATOR;
+            if (auto_scroll_repeat_accum >= AUTO_SCROLL_REPEAT_DENOMINATOR) {
+                auto_scroll_repeat_accum -= AUTO_SCROLL_REPEAT_DENOMINATOR;
                 dy = auto_scroll_dir * AUTO_SCROLL_REPEAT_STEP;
 
                 if (auto_scroll_repeat_log_count < BBTRACKBALL_AUTO_REPORT_LOG_LIMIT) {

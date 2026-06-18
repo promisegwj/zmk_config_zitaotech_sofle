@@ -146,7 +146,7 @@
 &kp GRAVE  &kp EXCL   &kp AT     &kp HASH  &kp DLLR  &kp PRCNT  &none                  &none          &kp KP_NUM  &kp KP_SLASH  &kp KP_ASTERISK  &kp KP_MINUS  &kp BSPC      &kp DEL
 &none      &kp CARET  &kp AMPS   &kp STAR  &kp LPAR  &kp RPAR                                         &kp KP_N7   &kp KP_N8     &kp KP_N9        &kp KP_PLUS   &none         &none
 &to 0      &none      &none      &none     &kp LBKT  &kp RBKT   &none                  &none          &kp KP_N4   &kp KP_N5     &kp KP_N6        &kp KP_PLUS   &kp KP_EQUAL  &kp KP_COMMA
-&kp LSHFT  &none      &none      &kp UP    &kp LBRC  &kp RBRC   &kp PG_DN  &kp PG_UP    &mkp MB1  &mkp MB2  &kp KP_N1   &kp KP_N2     &kp KP_N3        &kp KP_ENTER  &kp HOME      &kp END
+&kp LSHFT  &none      &none      &kp UP    &kp LBRC  &kp RBRC   &bt BT_NXT &bt BT_PRV   &mkp MB1  &mkp MB2  &kp KP_N1   &kp KP_N2     &kp KP_N3        &kp KP_ENTER  &kp HOME      &kp END
                       &kp LEFT   &kp DOWN  &kp RIGHT &lt 0 SPACE      &kp ENTER                              &kp ENTER  &lt 0 SPACE   &kp KP_N0        &kp KP_DOT    &kp KP_ENTER
             >;
         }; 
@@ -155,8 +155,8 @@
             bindings = <
 &kp ESC   &kp N1    &kp N2     &kp N3   &kp N4   &kp N5     &bt BT_CLR                       &kp C_MUTE       &none      &none      &none   &none         &none  &kp BSPC            
 &kp TAB   &kp Q     &kp W      &kp E    &kp R    &kp T                                                        &none      &mkp RCLK  &none   &none         &none  &none
-&kp CAPS  &kp A     &kp S      &kp D    &kp F    &kp G      &mkp LCLK                        &mkp LCLK        &none      &mkp LCLK  &none   &none         &none  &none
-&kp LSHFT &kp Z     &kp X      &kp C    &kp V    &kp B      &msc SCRL_DOWN   &msc SCRL_UP    &none  &none     &none      &mkp MB3   &none   &msc SCRL_UP  &none  &none
+&kp CAPS  &kp A     &kp S      &kp D    &kp F    &kp G      &mkp LCLK                        &mkp LCLK        &none      &mkp LCLK  &mkp RCLK &none         &none  &none
+&kp LSHFT &kp Z     &kp X      &kp C    &kp V    &kp B      &bt BT_NXT       &bt BT_PRV      &none  &none     &none      &mkp MB3   &none   &msc SCRL_UP  &none  &none
                     &kp LCTRL  &kp LGUI &kp LALT &kp SPACE  &mkp MB1                                 &mkp MB3  &mkp MB2   &kp RALT   &kp RGUI &msc SCRL_DOWN
             >;
         };
