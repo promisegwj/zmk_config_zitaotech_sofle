@@ -55,6 +55,9 @@ static struct k_work_q bbtrackball_work_q;
 
 #define SCROLL_REPORT_MAX 24
 
+#define BBTRACKBALL_EDGE_LOG_LIMIT 8
+#define BBTRACKBALL_REPORT_LOG_LIMIT 12
+
 /* =========================================================
  * Runtime State
  * ========================================================= */
@@ -72,18 +75,20 @@ static uint32_t last_move_time = 0;
  * ========================================================= */
 
 typedef struct {
+    const char *name;
     const struct device *gpio_dev;
     int pin;
     int last_state;
     uint32_t last_time;
     int sign;
+    uint8_t edge_log_count;
 } DirInput;
 
 static DirInput dir_inputs[] = {
-    {DEVICE_DT_GET(GPIO0_DEV), LEFT_GPIO_PIN, 1, 0, -1},
-    {DEVICE_DT_GET(GPIO0_DEV), RIGHT_GPIO_PIN, 1, 0, +1},
-    {DEVICE_DT_GET(GPIO0_DEV), UP_GPIO_PIN, 1, 0, -1},
-    {DEVICE_DT_GET(GPIO1_DEV), DOWN_GPIO_PIN, 1, 0, +1},
+    {"LEFT", DEVICE_DT_GET(GPIO0_DEV), LEFT_GPIO_PIN, 1, 0, -1, 0},
+    {"RIGHT", DEVICE_DT_GET(GPIO0_DEV), RIGHT_GPIO_PIN, 1, 0, +1, 0},
+    {"UP", DEVICE_DT_GET(GPIO0_DEV), UP_GPIO_PIN, 1, 0, -1, 0},
+    {"DOWN", DEVICE_DT_GET(GPIO1_DEV), DOWN_GPIO_PIN, 1, 0, +1, 0},
 };
 
 /* ========================================================= */
@@ -110,6 +115,13 @@ bool trackball_is_active(void) { return (k_uptime_get_32() - last_move_time) < 4
 /* ========================================================= */
 
 static void report_scroll(const struct device *dev, int dx, int dy) {
+    static uint8_t report_log_count;
+
+    if (report_log_count < BBTRACKBALL_REPORT_LOG_LIMIT && (dx != 0 || dy != 0)) {
+        LOG_INF("BBtrackball report dx=%d hwheel=%d dy=%d wheel=%d", dx, -dx, dy, dy);
+        report_log_count++;
+    }
+
     input_report_rel(dev, INPUT_REL_HWHEEL, -dx, false, K_NO_WAIT);
     input_report_rel(dev, INPUT_REL_WHEEL, dy, true, K_NO_WAIT);
 }
@@ -183,14 +195,22 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 uint32_t now = k_uptime_get_32();
                 uint32_t delta_ms = now - d->last_time;
                 int delta_px = scroll_delta_from_interval(delta_ms);
+                int signed_delta = d->sign * delta_px;
 
                 k_spinlock_key_t key = k_spin_lock(&acc_lock);
                 if (i < 2) {
-                    dx_acc += d->sign * delta_px;
+                    dx_acc += signed_delta;
                 } else {
-                    dy_acc += d->sign * delta_px;
+                    dy_acc += signed_delta;
                 }
                 k_spin_unlock(&acc_lock, key);
+
+                if (d->edge_log_count < BBTRACKBALL_EDGE_LOG_LIMIT) {
+                    LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d delta_ms=%u step=%d signed=%d",
+                            d->name, d->gpio_dev->name, d->pin, val, delta_ms, delta_px,
+                            signed_delta);
+                    d->edge_log_count++;
+                }
 
                 d->last_state = val;
                 d->last_time = now;
@@ -271,6 +291,10 @@ static int bbtrackball_init(const struct device *dev) {
 
         d->last_state = gpio_pin_get(d->gpio_dev, d->pin);
         d->last_time = k_uptime_get_32();
+        d->edge_log_count = 0;
+
+        LOG_INF("BBtrackball input %s gpio=%s.%d initial=%d sign=%d", d->name,
+                d->gpio_dev->name, d->pin, d->last_state, d->sign);
 
         data->gpio_cbs[i].parent = data;
 
