@@ -57,6 +57,7 @@ static struct k_work_q bbtrackball_work_q;
 #define VERTICAL_TAIL_ADD_BUDGET 2
 #define VERTICAL_TAIL_MAX_BUDGET 6
 #define VERTICAL_TAIL_PUMP_DIVISOR 2
+#define VERTICAL_REAL_QUEUE_SIZE 16
 
 /* Diagnostic: disable vertical latch/repeat synthetic output. */
 #define BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT 1
@@ -79,11 +80,19 @@ static struct k_spinlock acc_lock;
 static atomic_t scroll_work_active;
 
 static int dx_acc = 0;
+#if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static int dy_acc = 0;
+#endif
 static int vertical_tail_dir = 0;
 static uint8_t vertical_tail_budget = 0;
 static uint8_t vertical_tail_pump_divider = 0;
 static uint32_t vertical_tail_until = 0;
+
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+static int vertical_real_queue[VERTICAL_REAL_QUEUE_SIZE];
+static uint8_t vertical_real_queue_head = 0;
+static uint8_t vertical_real_queue_count = 0;
+#endif
 
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
 static int auto_scroll_dir = 0;
@@ -189,6 +198,46 @@ static int take_scroll_tick_delta(int *value) {
 
     return 0;
 }
+
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+static bool vertical_real_queue_has_pending(void) {
+    return vertical_real_queue_count > 0;
+}
+
+static void enqueue_vertical_real_delta(int delta) {
+    if (vertical_real_queue_count == ARRAY_SIZE(vertical_real_queue)) {
+        /* Bound stale backlog: keep newest real edges if interrupts outpace draining. */
+        vertical_real_queue_head =
+            (vertical_real_queue_head + 1) % ARRAY_SIZE(vertical_real_queue);
+        vertical_real_queue_count--;
+    }
+
+    uint8_t tail =
+        (vertical_real_queue_head + vertical_real_queue_count) % ARRAY_SIZE(vertical_real_queue);
+    vertical_real_queue[tail] = delta;
+    vertical_real_queue_count++;
+}
+
+static int take_vertical_real_delta(void) {
+    if (!vertical_real_queue_has_pending()) {
+        return 0;
+    }
+
+    int *front = &vertical_real_queue[vertical_real_queue_head];
+    int delta = take_scroll_tick_delta(front);
+
+    if (*front == 0) {
+        vertical_real_queue_head =
+            (vertical_real_queue_head + 1) % ARRAY_SIZE(vertical_real_queue);
+        vertical_real_queue_count--;
+        if (vertical_real_queue_count == 0) {
+            vertical_real_queue_head = 0;
+        }
+    }
+
+    return delta;
+}
+#endif
 
 static bool vertical_tail_is_live(uint32_t now) {
     return vertical_tail_dir != 0 && (int32_t)(vertical_tail_until - now) > 0;
@@ -334,13 +383,11 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                     dx_acc += signed_impulse;
                 } else {
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
-                    if ((vertical_tail_dir != 0 && vertical_tail_dir != d->sign) ||
-                        (dy_acc != 0 && ((dy_acc > 0) != (d->sign > 0)))) {
+                    if (vertical_tail_dir != 0 && vertical_tail_dir != d->sign) {
                         clear_vertical_tail();
-                        dy_acc = 0;
                     }
 
-                    dy_acc += signed_impulse;
+                    enqueue_vertical_real_delta(signed_impulse);
                     refresh_vertical_tail(d->sign, now);
 #else
                     apply_impulse = process_vertical_auto_latch(d->sign, now, &auto_entered,
@@ -407,11 +454,19 @@ static void bbtrackball_work_handler(struct k_work *work) {
         k_spinlock_key_t key = k_spin_lock(&acc_lock);
 
         int dx = take_scroll_tick_delta(&dx_acc);
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+        int dy = take_vertical_real_delta();
+#else
         int dy = take_scroll_tick_delta(&dy_acc);
+#endif
         uint32_t now = k_uptime_get_32();
         bool tail_active = vertical_tail_is_live(now);
 
-        if (dy == 0 && tail_active) {
+        if (dy == 0 && tail_active
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+            && !vertical_real_queue_has_pending()
+#endif
+        ) {
             dy = take_vertical_tail_delta(now);
         }
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
@@ -455,7 +510,11 @@ static void bbtrackball_work_handler(struct k_work *work) {
         atomic_set(&scroll_work_active, 0);
 
         key = k_spin_lock(&acc_lock);
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+        bool has_pending = dx_acc != 0 || vertical_real_queue_has_pending();
+#else
         bool has_pending = dx_acc != 0 || dy_acc != 0;
+#endif
         has_pending = has_pending || vertical_tail_is_live(k_uptime_get_32());
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         has_pending = has_pending || auto_scroll_dir != 0;
