@@ -79,7 +79,8 @@ static int dy_acc = 0;
 static int auto_scroll_dir = 0;
 static int vertical_streak_dir = 0;
 static uint8_t vertical_streak_count = 0;
-static uint32_t vertical_streak_last_time = 0;
+static uint32_t vertical_streak_last_edge_time = 0;
+static uint32_t auto_scroll_last_input_time = 0;
 static uint8_t auto_scroll_repeat_accum = 0;
 static uint8_t auto_scroll_enter_log_count = 0;
 static uint8_t auto_scroll_stop_log_count = 0;
@@ -182,14 +183,16 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
     *auto_stopped = false;
 
     if (auto_scroll_dir != 0) {
+        auto_scroll_last_input_time = now;
+
         if (dir == -auto_scroll_dir) {
             auto_scroll_dir = 0;
-            vertical_streak_dir = 0;
-            vertical_streak_count = 0;
-            vertical_streak_last_time = now;
+            vertical_streak_dir = dir;
+            vertical_streak_count = 1;
+            vertical_streak_last_edge_time = now;
             auto_scroll_repeat_accum = 0;
             *auto_stopped = true;
-            return false;
+            return true;
         }
 
         /*
@@ -199,12 +202,12 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
          */
         vertical_streak_dir = dir;
         vertical_streak_count = 0;
-        vertical_streak_last_time = now;
+        vertical_streak_last_edge_time = now;
         return true;
     }
 
     if (vertical_streak_dir == dir &&
-        (now - vertical_streak_last_time) <= AUTO_SCROLL_TRIGGER_WINDOW_MS) {
+        (now - vertical_streak_last_edge_time) <= AUTO_SCROLL_TRIGGER_WINDOW_MS) {
         if (vertical_streak_count < AUTO_SCROLL_TRIGGER_EDGES) {
             vertical_streak_count++;
         }
@@ -213,12 +216,13 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
         vertical_streak_count = 1;
     }
 
-    vertical_streak_last_time = now;
+    vertical_streak_last_edge_time = now;
 
     if (vertical_streak_count >= AUTO_SCROLL_TRIGGER_EDGES) {
         auto_scroll_dir = dir;
         vertical_streak_count = 0;
         auto_scroll_repeat_accum = 0;
+        auto_scroll_last_input_time = now;
         *auto_entered = true;
     }
 
@@ -321,11 +325,9 @@ static void bbtrackball_work_handler(struct k_work *work) {
         bool log_auto_report = false;
         bool log_auto_timeout = false;
 
-        if (auto_active && (k_uptime_get_32() - vertical_streak_last_time) >
+        if (auto_active && (k_uptime_get_32() - auto_scroll_last_input_time) >
                                AUTO_SCROLL_IDLE_TIMEOUT_MS) {
             auto_scroll_dir = 0;
-            vertical_streak_dir = 0;
-            vertical_streak_count = 0;
             auto_scroll_repeat_accum = 0;
             auto_active = false;
             if (auto_scroll_stop_log_count < BBTRACKBALL_AUTO_LOG_LIMIT) {
