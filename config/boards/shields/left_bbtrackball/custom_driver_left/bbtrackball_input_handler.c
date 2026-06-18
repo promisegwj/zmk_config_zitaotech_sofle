@@ -46,6 +46,7 @@ static struct k_work_q bbtrackball_work_q;
 
 #define SCROLL_EDGE_IMPULSE 2
 #define SCROLL_DRAIN_INTERVAL_MS 8
+#define SCROLL_MEDIUM_BACKLOG_THRESHOLD 3
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
 
@@ -152,6 +153,9 @@ static int take_scroll_tick_delta(int *value) {
 
     if (*value >= SCROLL_FAST_BACKLOG_THRESHOLD || *value <= -SCROLL_FAST_BACKLOG_THRESHOLD) {
         max_delta = SCROLL_REPORT_MAX_PER_TICK;
+    } else if (*value >= SCROLL_MEDIUM_BACKLOG_THRESHOLD ||
+               *value <= -SCROLL_MEDIUM_BACKLOG_THRESHOLD) {
+        max_delta = 2;
     }
 
     if (*value > 0) {
@@ -188,7 +192,8 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
         vertical_streak_dir = dir;
         vertical_streak_count = 0;
         vertical_streak_last_time = now;
-        return false;
+        auto_scroll_repeat_divider = 0;
+        return true;
     }
 
     if (vertical_streak_dir == dir &&
@@ -308,7 +313,7 @@ static void bbtrackball_work_handler(struct k_work *work) {
         bool auto_active = auto_scroll_dir != 0;
         bool log_auto_report = false;
 
-        if (dy == 0 && auto_active) {
+        if (dx == 0 && dy == 0 && auto_active) {
             auto_scroll_repeat_divider++;
             if (auto_scroll_repeat_divider >= AUTO_SCROLL_REPEAT_DIVISOR) {
                 auto_scroll_repeat_divider = 0;
