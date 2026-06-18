@@ -44,17 +44,10 @@ static struct k_work_q bbtrackball_work_q;
  * Config
  * ========================================================= */
 
-#define SCROLL_STEP_SLOW 2
-#define SCROLL_STEP_NORMAL 4
-#define SCROLL_STEP_FAST 7
-#define SCROLL_STEP_VERY_FAST 10
-
-#define SCROLL_INTERVAL_FAST_MS 5
-#define SCROLL_INTERVAL_NORMAL_MS 15
-#define SCROLL_INTERVAL_SLOW_MS 35
-
-#define SCROLL_REPORT_MAX 24
-#define SCROLL_UP_SMOOTH_RESET_MS 120
+#define SCROLL_EDGE_IMPULSE 1
+#define SCROLL_DRAIN_INTERVAL_MS 8
+#define SCROLL_FAST_BACKLOG_THRESHOLD 6
+#define SCROLL_REPORT_MAX_PER_TICK 2
 
 #define BBTRACKBALL_EDGE_LOG_LIMIT 8
 #define BBTRACKBALL_REPORT_LOG_LIMIT 12
@@ -81,16 +74,15 @@ typedef struct {
     int pin;
     int last_state;
     uint32_t last_time;
-    uint32_t last_delta_ms;
     int sign;
     uint8_t edge_log_count;
 } DirInput;
 
 static DirInput dir_inputs[] = {
-    {"LEFT", DEVICE_DT_GET(GPIO0_DEV), LEFT_GPIO_PIN, 1, 0, 0, -1, 0},
-    {"RIGHT", DEVICE_DT_GET(GPIO0_DEV), RIGHT_GPIO_PIN, 1, 0, 0, +1, 0},
-    {"UP", DEVICE_DT_GET(GPIO0_DEV), UP_GPIO_PIN, 1, 0, 0, -1, 0},
-    {"DOWN", DEVICE_DT_GET(GPIO1_DEV), DOWN_GPIO_PIN, 1, 0, 0, +1, 0},
+    {"LEFT", DEVICE_DT_GET(GPIO0_DEV), LEFT_GPIO_PIN, 1, 0, -1, 0},
+    {"RIGHT", DEVICE_DT_GET(GPIO0_DEV), RIGHT_GPIO_PIN, 1, 0, +1, 0},
+    {"UP", DEVICE_DT_GET(GPIO0_DEV), UP_GPIO_PIN, 1, 0, -1, 0},
+    {"DOWN", DEVICE_DT_GET(GPIO1_DEV), DOWN_GPIO_PIN, 1, 0, +1, 0},
 };
 
 /* ========================================================= */
@@ -128,61 +120,37 @@ static void report_scroll(const struct device *dev, int dx, int dy) {
     input_report_rel(dev, INPUT_REL_WHEEL, dy, true, K_NO_WAIT);
 }
 
-static int scroll_delta_from_interval(uint32_t delta_ms) {
-    if (delta_ms <= SCROLL_INTERVAL_FAST_MS) {
-        return SCROLL_STEP_VERY_FAST;
-    }
-
-    if (delta_ms <= SCROLL_INTERVAL_NORMAL_MS) {
-        return SCROLL_STEP_FAST;
-    }
-
-    if (delta_ms <= SCROLL_INTERVAL_SLOW_MS) {
-        return SCROLL_STEP_NORMAL;
-    }
-
-    return SCROLL_STEP_SLOW;
-}
-
-static uint32_t scroll_interval_for_step(const DirInput *d, size_t dir_index, uint32_t delta_ms) {
-    if (dir_index >= 2 && d->sign < 0 && d->last_delta_ms > 0 &&
-        d->last_delta_ms <= SCROLL_UP_SMOOTH_RESET_MS &&
-        delta_ms <= SCROLL_UP_SMOOTH_RESET_MS) {
-        return (d->last_delta_ms + delta_ms + 1) / 2;
-    }
-
-    return delta_ms;
-}
-
-static int take_scroll_chunk(int *value) {
-    if (*value > SCROLL_REPORT_MAX) {
-        *value -= SCROLL_REPORT_MAX;
-        return SCROLL_REPORT_MAX;
-    }
-
-    if (*value < -SCROLL_REPORT_MAX) {
-        *value += SCROLL_REPORT_MAX;
-        return -SCROLL_REPORT_MAX;
-    }
-
-    int chunk = *value;
-    *value = 0;
-    return chunk;
-}
-
-static void report_scroll_chunked(const struct device *dev, int dx, int dy) {
-    while (dx != 0 || dy != 0) {
-        int chunk_x = take_scroll_chunk(&dx);
-        int chunk_y = take_scroll_chunk(&dy);
-
-        report_scroll(dev, chunk_x, chunk_y);
-    }
-}
-
 static void submit_scroll_work(struct bbtrackball_data *data) {
     if (atomic_cas(&scroll_work_active, 0, 1)) {
-        k_work_submit_to_queue(&bbtrackball_work_q, &data->work);
+        int ret = k_work_submit_to_queue(&bbtrackball_work_q, &data->work);
+
+        if (ret < 0) {
+            atomic_set(&scroll_work_active, 0);
+            LOG_WRN("BBtrackball scroll work submit failed: %d", ret);
+        }
     }
+}
+
+static int take_scroll_tick_delta(int *value) {
+    int max_delta = 1;
+
+    if (*value >= SCROLL_FAST_BACKLOG_THRESHOLD || *value <= -SCROLL_FAST_BACKLOG_THRESHOLD) {
+        max_delta = SCROLL_REPORT_MAX_PER_TICK;
+    }
+
+    if (*value > 0) {
+        int delta = *value < max_delta ? *value : max_delta;
+        *value -= delta;
+        return delta;
+    }
+
+    if (*value < 0) {
+        int delta = *value > -max_delta ? *value : -max_delta;
+        *value -= delta;
+        return delta;
+    }
+
+    return 0;
 }
 
 /* =========================================================
@@ -206,28 +174,25 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
 
                 uint32_t now = k_uptime_get_32();
                 uint32_t delta_ms = now - d->last_time;
-                uint32_t step_delta_ms = scroll_interval_for_step(d, i, delta_ms);
-                int delta_px = scroll_delta_from_interval(step_delta_ms);
-                int signed_delta = d->sign * delta_px;
+                int signed_impulse = d->sign * SCROLL_EDGE_IMPULSE;
 
                 k_spinlock_key_t key = k_spin_lock(&acc_lock);
                 if (i < 2) {
-                    dx_acc += signed_delta;
+                    dx_acc += signed_impulse;
                 } else {
-                    dy_acc += signed_delta;
+                    dy_acc += signed_impulse;
                 }
                 k_spin_unlock(&acc_lock, key);
 
                 if (d->edge_log_count < BBTRACKBALL_EDGE_LOG_LIMIT) {
-                    LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d delta_ms=%u step_ms=%u step=%d signed=%d",
-                            d->name, d->gpio_dev->name, d->pin, val, delta_ms, step_delta_ms,
-                            delta_px, signed_delta);
+                    LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d delta_ms=%u impulse=%d signed=%d",
+                            d->name, d->gpio_dev->name, d->pin, val, delta_ms, SCROLL_EDGE_IMPULSE,
+                            signed_impulse);
                     d->edge_log_count++;
                 }
 
                 d->last_state = val;
                 d->last_time = now;
-                d->last_delta_ms = delta_ms;
 
                 submit_scroll_work(data);
             }
@@ -245,28 +210,24 @@ static void bbtrackball_work_handler(struct k_work *work) {
     const struct device *dev = data->dev;
 
     while (1) {
-        while (1) {
-            k_spinlock_key_t key = k_spin_lock(&acc_lock);
+        k_sleep(K_MSEC(SCROLL_DRAIN_INTERVAL_MS));
 
-            int dx = dx_acc;
-            int dy = dy_acc;
+        k_spinlock_key_t key = k_spin_lock(&acc_lock);
 
-            dx_acc = 0;
-            dy_acc = 0;
+        int dx = take_scroll_tick_delta(&dx_acc);
+        int dy = take_scroll_tick_delta(&dy_acc);
 
-            k_spin_unlock(&acc_lock, key);
+        k_spin_unlock(&acc_lock, key);
 
-            if (dx == 0 && dy == 0) {
-                break;
-            }
-
+        if (dx != 0 || dy != 0) {
             last_move_time = k_uptime_get_32();
-            report_scroll_chunked(dev, dx, dy);
+            report_scroll(dev, dx, dy);
+            continue;
         }
 
         atomic_set(&scroll_work_active, 0);
 
-        k_spinlock_key_t key = k_spin_lock(&acc_lock);
+        key = k_spin_lock(&acc_lock);
         bool has_pending = dx_acc != 0 || dy_acc != 0;
         k_spin_unlock(&acc_lock, key);
 
@@ -305,7 +266,6 @@ static int bbtrackball_init(const struct device *dev) {
 
         d->last_state = gpio_pin_get(d->gpio_dev, d->pin);
         d->last_time = k_uptime_get_32();
-        d->last_delta_ms = 0;
         d->edge_log_count = 0;
 
         LOG_INF("BBtrackball input %s gpio=%s.%d initial=%d sign=%d", d->name,
