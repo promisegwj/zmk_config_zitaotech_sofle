@@ -72,7 +72,7 @@ typedef struct {
     const char *name;
     const struct device *gpio_dev;
     int pin;
-    int last_state;
+    int last_logged_state;
     uint32_t last_time;
     int sign;
     uint8_t edge_log_count;
@@ -168,34 +168,30 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
 
         if ((dev == d->gpio_dev) && (pins & BIT(d->pin))) {
 
-            int val = gpio_pin_get(dev, d->pin);
+            int state = gpio_pin_get(dev, d->pin);
+            uint32_t now = k_uptime_get_32();
+            uint32_t delta_ms = now - d->last_time;
+            int signed_impulse = d->sign * SCROLL_EDGE_IMPULSE;
 
-            if (val != d->last_state) {
-
-                uint32_t now = k_uptime_get_32();
-                uint32_t delta_ms = now - d->last_time;
-                int signed_impulse = d->sign * SCROLL_EDGE_IMPULSE;
-
-                k_spinlock_key_t key = k_spin_lock(&acc_lock);
-                if (i < 2) {
-                    dx_acc += signed_impulse;
-                } else {
-                    dy_acc += signed_impulse;
-                }
-                k_spin_unlock(&acc_lock, key);
-
-                if (d->edge_log_count < BBTRACKBALL_EDGE_LOG_LIMIT) {
-                    LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d delta_ms=%u impulse=%d signed=%d",
-                            d->name, d->gpio_dev->name, d->pin, val, delta_ms, SCROLL_EDGE_IMPULSE,
-                            signed_impulse);
-                    d->edge_log_count++;
-                }
-
-                d->last_state = val;
-                d->last_time = now;
-
-                submit_scroll_work(data);
+            k_spinlock_key_t key = k_spin_lock(&acc_lock);
+            if (i < 2) {
+                dx_acc += signed_impulse;
+            } else {
+                dy_acc += signed_impulse;
             }
+            k_spin_unlock(&acc_lock, key);
+
+            if (d->edge_log_count < BBTRACKBALL_EDGE_LOG_LIMIT) {
+                LOG_INF("BBtrackball edge %s gpio=%s.%d state=%d prev=%d delta_ms=%u impulse=%d signed=%d",
+                        d->name, d->gpio_dev->name, d->pin, state, d->last_logged_state, delta_ms,
+                        SCROLL_EDGE_IMPULSE, signed_impulse);
+                d->edge_log_count++;
+            }
+
+            d->last_logged_state = state;
+            d->last_time = now;
+
+            submit_scroll_work(data);
         }
     }
 }
@@ -262,21 +258,21 @@ static int bbtrackball_init(const struct device *dev) {
 
         DirInput *d = &dir_inputs[i];
 
-        gpio_pin_configure(d->gpio_dev, d->pin, GPIO_INPUT | GPIO_PULL_UP);
+        gpio_pin_configure(d->gpio_dev, d->pin, GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
 
-        d->last_state = gpio_pin_get(d->gpio_dev, d->pin);
+        d->last_logged_state = gpio_pin_get(d->gpio_dev, d->pin);
         d->last_time = k_uptime_get_32();
         d->edge_log_count = 0;
 
         LOG_INF("BBtrackball input %s gpio=%s.%d initial=%d sign=%d", d->name,
-                d->gpio_dev->name, d->pin, d->last_state, d->sign);
+                d->gpio_dev->name, d->pin, d->last_logged_state, d->sign);
 
         data->gpio_cbs[i].parent = data;
 
         gpio_init_callback(&data->gpio_cbs[i].cb, dir_edge_cb, BIT(d->pin));
         gpio_add_callback(d->gpio_dev, &data->gpio_cbs[i].cb);
 
-        gpio_pin_interrupt_configure(d->gpio_dev, d->pin, GPIO_INT_EDGE_BOTH);
+        gpio_pin_interrupt_configure(d->gpio_dev, d->pin, GPIO_INT_EDGE_TO_ACTIVE);
     }
 
     return 0;
