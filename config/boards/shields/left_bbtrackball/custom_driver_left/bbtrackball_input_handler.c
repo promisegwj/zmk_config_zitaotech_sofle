@@ -187,10 +187,15 @@ static bool process_vertical_auto_latch(int dir, uint32_t now, bool *auto_entere
             return false;
         }
 
+        /*
+         * Keep real same-direction edges while latched. The auto-repeat path
+         * only fills quiet gaps, so diagonal up/right rolls do not lose their
+         * vertical component after the latch engages.
+         */
         vertical_streak_dir = dir;
         vertical_streak_count = 0;
         vertical_streak_last_time = now;
-        return false;
+        return true;
     }
 
     if (vertical_streak_dir == dir &&
