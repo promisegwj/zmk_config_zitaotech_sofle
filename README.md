@@ -102,12 +102,12 @@ README 中展示的四张键位图是参考 Word 文档截图风格重画的深�
 
 当前逻辑：
 
-- CapsLock 开启时，指点移动转滚轮。
-- 或者物理位 61 按住时，指点移动转滚轮。
+- 物理位 61 按住超过 300ms 时，指点移动转滚轮。
+- Caps/CapsLock 只保留键盘层行为，不触发滚动。
 - 其他情况下，指点设备继续作为鼠标指针移动。
 - TrackPoint 的 `trackpoint_scroll_processor` 在 `trackpoint_listener` 里位于 `zip_temp_layer 3 600` 前面。
 
-左手 A320 trackpad 和 BB trackball 也按同样思路处理：物理位 61 或 CapsLock 触发滚动，不再额外要求当前最高层是 `MOUSE_layer`。
+左手 A320 trackpad 也按同样思路处理：物理位 61 长按触发滚动，不再额外要求当前最高层是 `MOUSE_layer`。BB trackball 保持 scroll-only，不通过 CapsLock 切换。
 
 ## 构建与验收
 
@@ -129,7 +129,7 @@ GitHub Actions 的 `Build ZMK firmware` 会按 `build.yaml` 构建 6 个固件�
 - QWERTY 拇指 Space 轻敲/按住行为正确，长按进 `FUNC` 不迟钝。
 - QWERTY 中间 Enter 短按正常回车，长按配合指点设备滚动，不再触发鼠标中键。
 - Word 输入时删除、空格、回车不再偶发焦点跳转。
-- TrackPoint、A320 trackpad、BB trackball 在物理位 61 或 CapsLock 下能滚动。
+- TrackPoint、A320 trackpad 在物理位 61 长按后能滚动；BB trackball 保持滚动；CapsLock 不触发滚动。
 - 物理位 34 和 36 分别仍触发方向键模式与慢速/精细模式。
 
 ## 注意事项

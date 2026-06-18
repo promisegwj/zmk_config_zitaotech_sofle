@@ -16,15 +16,12 @@
 
 #include <drivers/input_processor.h>
 #include <zmk/event_manager.h>
-#include <zmk/events/hid_indicators_changed.h>
 #include <zmk/events/position_state_changed.h>
-#include <zmk/hid.h>
 
 LOG_MODULE_REGISTER(zitaotech_trackpoint_scroll, LOG_LEVEL_INF);
 
 #define TRACKPOINT_SCROLL_POSITION 61
 #define TRACKPOINT_SCROLL_HOLD_MS 300
-#define HID_INDICATORS_CAPS_LOCK (1 << 1)
 
 /* TrackPoint movement is already scaled by the peripheral before it reaches
  * this central processor, so keep this divisor much lower than the raw driver
@@ -40,13 +37,8 @@ struct trackpoint_scroll_processor_data {
 
 static bool trackpoint_scroll_pressed;
 static uint32_t trackpoint_scroll_pressed_at;
-static zmk_hid_indicators_t current_indicators;
 
 static bool trackpoint_scroll_active(void) {
-    if (current_indicators & HID_INDICATORS_CAPS_LOCK) {
-        return true;
-    }
-
     if (!trackpoint_scroll_pressed) {
         return false;
     }
@@ -99,7 +91,8 @@ static int trackpoint_scroll_handle_event(const struct device *dev, struct input
         break;
     case INPUT_REL_Y:
         event->code = INPUT_REL_WHEEL;
-        event->value = scroll_ticks(&data->v_remainder, event->value, -1);
+        /* Peripheral REL_Y is already normalized before reaching central. */
+        event->value = scroll_ticks(&data->v_remainder, event->value, 1);
         break;
     default:
         return ZMK_INPUT_PROC_CONTINUE;
@@ -125,21 +118,8 @@ static int trackpoint_scroll_position_cb(const zmk_event_t *eh) {
     return ZMK_EV_EVENT_BUBBLE;
 }
 
-static int trackpoint_scroll_hid_cb(const zmk_event_t *eh) {
-    const struct zmk_hid_indicators_changed *ev = as_zmk_hid_indicators_changed(eh);
-
-    if (ev) {
-        current_indicators = ev->indicators;
-    }
-
-    return ZMK_EV_EVENT_BUBBLE;
-}
-
 ZMK_LISTENER(trackpoint_scroll_position_listener, trackpoint_scroll_position_cb);
 ZMK_SUBSCRIPTION(trackpoint_scroll_position_listener, zmk_position_state_changed);
-
-ZMK_LISTENER(trackpoint_scroll_hid_listener, trackpoint_scroll_hid_cb);
-ZMK_SUBSCRIPTION(trackpoint_scroll_hid_listener, zmk_hid_indicators_changed);
 
 static const struct zmk_input_processor_driver_api trackpoint_scroll_driver_api = {
     .handle_event = trackpoint_scroll_handle_event,
