@@ -51,9 +51,14 @@ static struct k_work_q bbtrackball_work_q;
 
 #define AUTO_SCROLL_TRIGGER_EDGES 5
 #define AUTO_SCROLL_TRIGGER_WINDOW_MS 360
-/* 3/4 work cycles gives 1.5x the old 1/2 repeat cadence without larger jumps. */
-#define AUTO_SCROLL_REPEAT_NUMERATOR 3
-#define AUTO_SCROLL_REPEAT_DENOMINATOR 4
+/*
+ * Auto-scroll is a gap filler, not a free-running motor. Keep real edges fast,
+ * but stop the latch shortly after input goes quiet so browsers do not coalesce
+ * a long tail of repeat reports into one large page jump.
+ */
+#define AUTO_SCROLL_IDLE_TIMEOUT_MS 120
+#define AUTO_SCROLL_REPEAT_NUMERATOR 1
+#define AUTO_SCROLL_REPEAT_DENOMINATOR 2
 #define AUTO_SCROLL_REPEAT_STEP 1
 
 #define BBTRACKBALL_EDGE_LOG_LIMIT 8
@@ -314,6 +319,20 @@ static void bbtrackball_work_handler(struct k_work *work) {
         int dy = take_scroll_tick_delta(&dy_acc);
         bool auto_active = auto_scroll_dir != 0;
         bool log_auto_report = false;
+        bool log_auto_timeout = false;
+
+        if (auto_active && (k_uptime_get_32() - vertical_streak_last_time) >
+                               AUTO_SCROLL_IDLE_TIMEOUT_MS) {
+            auto_scroll_dir = 0;
+            vertical_streak_dir = 0;
+            vertical_streak_count = 0;
+            auto_scroll_repeat_accum = 0;
+            auto_active = false;
+            if (auto_scroll_stop_log_count < BBTRACKBALL_AUTO_LOG_LIMIT) {
+                auto_scroll_stop_log_count++;
+                log_auto_timeout = true;
+            }
+        }
 
         if (dy == 0 && auto_active) {
             auto_scroll_repeat_accum += AUTO_SCROLL_REPEAT_NUMERATOR;
@@ -329,6 +348,11 @@ static void bbtrackball_work_handler(struct k_work *work) {
         }
 
         k_spin_unlock(&acc_lock, key);
+
+        if (log_auto_timeout) {
+            LOG_INF("BBtrackball auto-scroll timeout idle_ms=%d",
+                    AUTO_SCROLL_IDLE_TIMEOUT_MS);
+        }
 
         if (log_auto_report) {
             LOG_INF("BBtrackball auto-scroll repeat dy=%d", dy);
