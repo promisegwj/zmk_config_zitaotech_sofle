@@ -47,8 +47,8 @@ layers:
   - C
   - V
   - B
-  - PG DN
-  - PG UP
+  - BT NXT
+  - BT PRV
   - {t: '[', h: '{'}
   - {t: ']', h: '}'}
   - N

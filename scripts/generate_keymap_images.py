@@ -157,6 +157,8 @@ def clean_label(value: Any) -> str:
         "&bl BL_DEC": "BL\nDEC",
         "&bl BL_INC": "BL\nINC",
         "BT CLR": "BT\nCLR",
+        "BT NXT": "BT\nNXT",
+        "BT PRV": "BT\nPRV",
         "OUT TOG": "OUT\nTOG",
         "KP NUM": "KP\nNUM",
         "KP SLASH": "KP\n/",
