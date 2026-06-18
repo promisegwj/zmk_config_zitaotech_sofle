@@ -223,7 +223,7 @@ layers:
   - R
   - T
   - ''
-  - '&mkp MB3'
+  - '&mkp RCLK'
   - ''
   - ''
   - ''
@@ -253,7 +253,7 @@ layers:
   - ''
   - ''
   - ''
-  - '&mkp RCLK'
+  - '&mkp MB3'
   - ''
   - '&msc SCRL_UP'
   - ''
