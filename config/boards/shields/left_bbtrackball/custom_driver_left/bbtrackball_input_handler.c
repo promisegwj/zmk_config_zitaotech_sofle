@@ -59,6 +59,8 @@ static struct k_work_q bbtrackball_work_q;
 #define VERTICAL_TAIL_PUMP_DIVISOR 2
 #define VERTICAL_TAIL_TRIGGER_WINDOW_MS 200
 #define VERTICAL_TAIL_TRIGGER_EDGES 2
+#define SMALL_MOTION_ASSIST_WINDOW_MS VERTICAL_TAIL_TRIGGER_WINDOW_MS
+#define SMALL_MOTION_ASSIST_STEP 1
 #define SCROLL_REAL_QUEUE_SIZE 32
 
 /* Diagnostic: disable vertical latch/repeat synthetic output. */
@@ -103,6 +105,9 @@ static uint32_t vertical_tail_until = 0;
 static int vertical_tail_candidate_dir = 0;
 static uint8_t vertical_tail_candidate_count = 0;
 static uint32_t vertical_tail_candidate_last_time = 0;
+static int vertical_small_motion_assist_dir = 0;
+static bool vertical_small_motion_assist_disabled = false;
+static uint32_t vertical_small_motion_assist_edge_time = 0;
 #endif
 
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
@@ -262,6 +267,55 @@ static void reset_vertical_tail_candidate(void) {
     vertical_tail_candidate_dir = 0;
     vertical_tail_candidate_count = 0;
     vertical_tail_candidate_last_time = 0;
+}
+
+static void arm_vertical_small_motion_assist(int dir, uint32_t now) {
+    vertical_small_motion_assist_dir = dir;
+    vertical_small_motion_assist_disabled = false;
+    vertical_small_motion_assist_edge_time = now;
+}
+
+static void reset_vertical_small_motion_assist(void) {
+    vertical_small_motion_assist_dir = 0;
+    vertical_small_motion_assist_disabled = false;
+    vertical_small_motion_assist_edge_time = 0;
+}
+
+static void update_vertical_small_motion_assist(int dir, uint32_t now) {
+    if (vertical_small_motion_assist_dir == 0 ||
+        dir == -vertical_small_motion_assist_dir ||
+        (now - vertical_small_motion_assist_edge_time) > SMALL_MOTION_ASSIST_WINDOW_MS) {
+        arm_vertical_small_motion_assist(dir, now);
+        return;
+    }
+
+    if (dir == vertical_small_motion_assist_dir) {
+        vertical_small_motion_assist_disabled = true;
+        vertical_small_motion_assist_edge_time = now;
+    }
+}
+
+static bool vertical_small_motion_assist_due(uint32_t now) {
+    return vertical_small_motion_assist_dir != 0 &&
+           !vertical_small_motion_assist_disabled &&
+           (int32_t)(now - vertical_small_motion_assist_edge_time -
+                     SMALL_MOTION_ASSIST_WINDOW_MS) >= 0;
+}
+
+static bool vertical_small_motion_assist_waiting(uint32_t now) {
+    return vertical_small_motion_assist_dir != 0 &&
+           !vertical_small_motion_assist_disabled &&
+           !vertical_small_motion_assist_due(now);
+}
+
+static int take_vertical_small_motion_assist_delta(uint32_t now) {
+    if (!vertical_small_motion_assist_due(now)) {
+        return 0;
+    }
+
+    int delta = vertical_small_motion_assist_dir * SMALL_MOTION_ASSIST_STEP;
+    reset_vertical_small_motion_assist();
+    return delta;
 }
 #endif
 
@@ -438,6 +492,7 @@ static void dir_edge_cb(const struct device *dev, struct gpio_callback *cb, uint
                 } else {
 #if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
                     enqueue_scroll_delta(&vertical_real_queue, signed_impulse);
+                    update_vertical_small_motion_assist(d->sign, now);
                     if (should_refresh_vertical_tail(d->sign, now)) {
                         refresh_vertical_tail(d->sign, now);
                     }
@@ -522,6 +577,11 @@ static void bbtrackball_work_handler(struct k_work *work) {
         ) {
             dy = take_vertical_tail_delta(now);
         }
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+        if (dy == 0 && !tail_active && !scroll_queue_has_pending(&vertical_real_queue)) {
+            dy = take_vertical_small_motion_assist_delta(now);
+        }
+#endif
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         bool auto_active = auto_scroll_dir != 0;
         bool log_auto_report = false;
@@ -569,7 +629,13 @@ static void bbtrackball_work_handler(struct k_work *work) {
 #else
         bool has_pending = dx_acc != 0 || dy_acc != 0;
 #endif
-        has_pending = has_pending || vertical_tail_is_live(k_uptime_get_32());
+        uint32_t pending_now = k_uptime_get_32();
+        has_pending = has_pending || vertical_tail_is_live(pending_now);
+#if BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
+        has_pending = has_pending ||
+                      vertical_small_motion_assist_waiting(pending_now) ||
+                      vertical_small_motion_assist_due(pending_now);
+#endif
 #if !BBTRACKBALL_DIAG_DISABLE_VERTICAL_AUTO_REPEAT
         has_pending = has_pending || auto_scroll_dir != 0;
 #endif
