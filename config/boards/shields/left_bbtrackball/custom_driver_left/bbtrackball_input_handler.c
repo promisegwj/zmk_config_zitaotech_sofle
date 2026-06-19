@@ -45,7 +45,7 @@ static struct k_work_q bbtrackball_work_q;
  * ========================================================= */
 
 #define SCROLL_EDGE_IMPULSE 2
-#define SCROLL_DRAIN_INTERVAL_MS 8
+#define SCROLL_DRAIN_INTERVAL_MS 6
 #define SCROLL_MEDIUM_BACKLOG_THRESHOLD 3
 #define SCROLL_FAST_BACKLOG_THRESHOLD 5
 #define SCROLL_REPORT_MAX_PER_TICK 3
