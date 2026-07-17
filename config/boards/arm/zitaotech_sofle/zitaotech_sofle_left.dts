@@ -164,6 +164,13 @@
 };
 
 / {
+    input_processors {
+        trackpoint_scroll_processor: trackpoint_scroll_processor {
+            compatible = "zitaotech,trackpoint-scroll-processor";
+            #input-processor-cells = <0>;
+        };
+    };
+
     trackpoint_listener: trackpoint_listener {
         compatible = "zmk,input-listener";
         status = "disabled";
@@ -184,6 +191,7 @@
 &trackpoint_listener {
     status = "okay";
     input-processors =
+        <&trackpoint_scroll_processor>,
         <&zip_temp_layer 3 600>,
         <&ip_behaviors0>,
         <&ip_behaviors1>,

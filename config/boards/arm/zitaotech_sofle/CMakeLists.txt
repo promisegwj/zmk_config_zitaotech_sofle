@@ -1,6 +1,7 @@
 if(CONFIG_BOARD_ZITAOTECH_SOFLE_LEFT)
 zephyr_library()
 zephyr_library_sources(custom_driver_left/keyboard_backlight.c)
+zephyr_library_sources(custom_driver_left/trackpoint_scroll_processor.c)
 zephyr_library_include_directories(${ZEPHYR_BASE}/drivers)
 zephyr_library_include_directories(../../../include)
 zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)
