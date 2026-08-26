@@ -72,11 +72,11 @@ config A320_SCROLL_INPUT_MAX
 
 config A320_SCROLL_DIVISOR_SLOW
     int "Scroll divisor slow (Fine-grained control)"
-    default 14
+    default 18
 
 config A320_SCROLL_DIVISOR_FAST
     int "Scroll divisor fast (Max speed limit)"
-    default 6
+    default 8
 
 config A320_DOMINANT_NUMERATOR
     int "Dominant axis numerator for accidental touch prevention"
