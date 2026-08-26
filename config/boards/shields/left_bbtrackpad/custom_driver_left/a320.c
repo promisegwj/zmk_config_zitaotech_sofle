@@ -51,10 +51,11 @@ static struct k_work_q a320_workq;
 #define SCROLL_DIVISOR_FAST CONFIG_A320_SCROLL_DIVISOR_FAST
 
 // --- Arrow key threshold / divisor ---
-#define ARROW_DEADZONE CONFIG_A320_SCROLL_DEADZONE
+#define ARROW_DEADZONE 1
 #define ARROW_INPUT_MAX 128
-#define ARROW_DIVISOR_SLOW CONFIG_A320_SCROLL_DIVISOR_SLOW
-#define ARROW_DIVISOR_FAST CONFIG_A320_SCROLL_DIVISOR_FAST
+#define ARROW_ACCEL_INPUT_MAX 64
+#define ARROW_DIVISOR_SLOW 60
+#define ARROW_DIVISOR_FAST 8
 
 // --- 防误触锁定比例配置 ---
 #define DOMINANT_NUMERATOR CONFIG_A320_DOMINANT_NUMERATOR
@@ -77,6 +78,9 @@ static struct k_work_q a320_workq;
 
 #define SLOW_KEY_MULTIPLIER 0.5f
 #define TOUCH_IDLE_TIMEOUT 50 // 30~80ms 看手感
+#define SCROLL_AXIS_NONE 0
+#define SCROLL_AXIS_X 1
+#define SCROLL_AXIS_Y 2
 /* ========= Watch Dog ========= */
 static uint32_t last_activity_time = 0;
 #define A320_WDT_TIMEOUT 200
@@ -127,6 +131,7 @@ struct a320_data {
     int16_t scroll_residue_y;
     int16_t arrow_residue_x;
     int16_t arrow_residue_y;
+    uint8_t scroll_axis;
 };
 
 /* ========= I2C 读取（加锁版） ========= */
@@ -160,7 +165,7 @@ static inline void process_scroll_axis(const struct device *dev, int16_t delta, 
                                        uint16_t input_code, int8_t dir_mult) {
     int abs_delta = abs(delta);
 
-    // ★ 不清零，保持连续性
+    /* Keep every real movement sample so slow gestures can accumulate smoothly. */
     if (abs_delta <= SCROLL_DEADZONE) {
         return;
     }
@@ -179,7 +184,8 @@ static inline void process_scroll_axis(const struct device *dev, int16_t delta, 
     if (divisor < 1)
         divisor = 1;
 
-    *residue += (delta * dir_mult);
+    int16_t limited_delta = delta < 0 ? -abs_delta : abs_delta;
+    *residue += (limited_delta * dir_mult);
 
     int16_t scroll_ticks = *residue / divisor;
     if (scroll_ticks != 0) {
@@ -187,8 +193,6 @@ static inline void process_scroll_axis(const struct device *dev, int16_t delta, 
         *residue %= divisor;
     }
 
-    // ★ 阻尼（关键）
-    *residue = (*residue * 3) / 4;
 }
 
 static inline void process_arrow_axis(const struct device *dev, int16_t delta, int16_t *residue,
@@ -205,10 +209,10 @@ static inline void process_arrow_axis(const struct device *dev, int16_t delta, i
     }
 
     // ★ 非线性 divisor（更丝滑）
-    float t = (float)abs_delta / SCROLL_INPUT_MAX;
+    float t = (float)abs_delta / ARROW_ACCEL_INPUT_MAX;
     t = t * t;
 
-    float f_div = SCROLL_DIVISOR_SLOW - (SCROLL_DIVISOR_SLOW - SCROLL_DIVISOR_FAST) * t;
+    float f_div = ARROW_DIVISOR_SLOW - (ARROW_DIVISOR_SLOW - ARROW_DIVISOR_FAST) * t;
 
     int divisor = (int)f_div;
     if (divisor < 1)
@@ -244,6 +248,7 @@ static void a320_work_cb(struct k_work *work) {
         data->scroll_residue_y = 0;
         data->arrow_residue_x = 0;
         data->arrow_residue_y = 0;
+        data->scroll_axis = SCROLL_AXIS_NONE;
 
         last_arrow_key_pressed = arrow_key_pressed;
         last_slow_key_pressed = slow_key_pressed;
@@ -277,7 +282,13 @@ static void a320_work_cb(struct k_work *work) {
     }
 
     /* ========= ⭐ TOUCH TIME TRACK ========= */
+    bool new_touch_gesture = !touched || (now - last_touch_time) > TOUCH_IDLE_TIMEOUT;
     if (got_data) {
+        if (new_touch_gesture) {
+            data->scroll_residue_x = 0;
+            data->scroll_residue_y = 0;
+            data->scroll_axis = SCROLL_AXIS_NONE;
+        }
         last_touch_time = now;
         touched = true;
     }
@@ -325,18 +336,20 @@ static void a320_work_cb(struct k_work *work) {
         if (just_enter_scroll) {
             data->scroll_residue_x = 0;
             data->scroll_residue_y = 0;
+            data->scroll_axis = SCROLL_AXIS_NONE;
         }
 
         int abs_dx = abs(dx);
         int abs_dy = abs(dy);
 
-        if (abs_dy * DOMINANT_DENOMINATOR > abs_dx * DOMINANT_NUMERATOR) {
-            dx = 0;
-        } else if (abs_dx * DOMINANT_DENOMINATOR > abs_dy * DOMINANT_NUMERATOR) {
+        if (data->scroll_axis == SCROLL_AXIS_NONE) {
+            data->scroll_axis = abs_dy >= abs_dx ? SCROLL_AXIS_Y : SCROLL_AXIS_X;
+        }
+
+        if (data->scroll_axis == SCROLL_AXIS_X) {
             dy = 0;
         } else {
             dx = 0;
-            dy = 0;
         }
 
         process_scroll_axis(dev, -1 * dx, &data->scroll_residue_x, INPUT_REL_HWHEEL, SCROLL_X_DIR);

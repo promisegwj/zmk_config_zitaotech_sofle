@@ -110,6 +110,8 @@ README 中展示的四张键位图是参考 Word 文档截图风格重画的深�
 
 左手 A320 trackpad 在所有层默认直接输出水平/垂直滚动，且不会临时切换键盘层；按住物理位 34 时输出方向键，按住物理位 36 时临时切换为半速精细指针。物理位 32 在 FUNC 层保留鼠标右键，在 QWERTY、NUM、MOUSE 层为鼠标左键。BB trackball 保持 scroll-only，不通过 CapsLock 切换。
 
+A320 滚动采用手势内主轴锁定：每次触摸开始时根据首段移动选择水平或垂直方向，抬手约 50ms 后解除。小幅移动余量不再逐采样衰减，滚动除数调整为慢速 14、快速 6，以改善长页面滚动的连续性和响应速度。
+
 ## 构建与验收
 
 GitHub Actions 的 `Build ZMK firmware` 会按 `build.yaml` 构建 6 个固件：
@@ -133,7 +135,7 @@ GitHub Actions 的 `Build ZMK firmware` 会按 `build.yaml` 构建 6 个固件�
 - TrackPoint 在物理位 61 长按后能滚动；A320 trackpad 和 BB trackball 默认直接滚动；CapsLock 不触发滚动。
 - A320 触控板物理位 34、36 分别触发方向键模式与半速精细指针模式；物理位 32 在 FUNC 层为右键，其余三层为左键。
 - A320 触控板滚动时保持当前键盘层，不触发 `zip_temp_layer`；TrackPoint/BB trackball 的临时 MOUSE 层机制保持原样。
-- 蓝牙模式下触控板停止操作 2 秒后熄灯；USB 闪烁和 CapsLock 呼吸灯逻辑保持不变。
+- USB 模式下触控板灯常亮；CapsLock 开启时以呼吸灯覆盖常亮状态。蓝牙且 CapsLock 关闭时灯熄灭，触控板或键盘操作均不会点亮触控板灯。
 
 ## 注意事项
 

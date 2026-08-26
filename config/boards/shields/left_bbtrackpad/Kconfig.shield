@@ -62,21 +62,21 @@ config A320_SCROLL_Y_DIR
 
 config A320_SCROLL_DEADZONE
     int "Scroll deadzone"
-    default 1
+    default 0
     help
-      Deadzone to filter out slight hand tremors.
+      Zero keeps small movements available for smooth accumulated scrolling.
 
 config A320_SCROLL_INPUT_MAX
     int "Scroll input max"
-    default 64
+    default 48
 
 config A320_SCROLL_DIVISOR_SLOW
     int "Scroll divisor slow (Fine-grained control)"
-    default 60
+    default 14
 
 config A320_SCROLL_DIVISOR_FAST
     int "Scroll divisor fast (Max speed limit)"
-    default 8
+    default 6
 
 config A320_DOMINANT_NUMERATOR
     int "Dominant axis numerator for accidental touch prevention"
