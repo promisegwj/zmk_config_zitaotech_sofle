@@ -37,7 +37,7 @@ static const struct device *const led_dev = DEVICE_DT_GET(DT_CHOSEN(zmk_trackpad
 
 #define ANIMATION_INTERVAL_MS 20
 #define POLLING_INTERVAL_MS 5
-#define AUTO_OFF_DELAY_MS 5000
+#define AUTO_OFF_DELAY_MS 2000
 
 #define FLASH_ON_MS 100   /* USB 模式亮灯时间 */
 #define FLASH_PERIOD 1000 /* USB 模式总周期 */

@@ -7,11 +7,11 @@ ZitaoTech Sofle 分体键盘的 ZMK 用户配置。当前分支是 `word-layout-
 ## 当前状态
 
 - 有效层数：4 层，分别是 `QWERTY`、`FUNC`、`NUM`、`MOUSE`。
-- `MOUSE_layer` 仍是第 3 层，`zip_temp_layer 3 600` 仍指向它。
+- `MOUSE_layer` 仍是第 3 层；TrackPoint/BB trackball 的 `zip_temp_layer 3 600` 仍指向它，A320 触控板不再自动切层。
 - QWERTY 两个 Space 使用 `&lt 1 SPACE`：短按 Space，长按进入 `FUNC`。
 - `&lt` 的 `tapping-term-ms` 已调整为 `280ms`，降低 Space 误进层概率。
-- QWERTY 中间 Enter 使用 `&sp_sc 0 ENTER`：短按 Enter，长按不向电脑发送按键，只作为滚动检测按住状态。
-- 物理位 61 按住即可启用滚动检测，不再要求最高层必须是 `MOUSE_layer`。
+- QWERTY 中间 Enter 使用 `&sp_sc 0 ENTER`：短按 Enter，长按不向电脑发送按键，只作为 TrackPoint 滚动检测的按住状态。
+- A320 触控板在任意层默认直接滚动，不需要再按住物理位 61。
 
 ## 维护入口
 
@@ -86,9 +86,10 @@ README 中展示的四张键位图是参考 Word 文档截图风格重画的深�
 
 | 物理位 | 用途 |
 | --- | --- |
-| 34 | 方向键模式 |
-| 36 | 慢速/精细模式 |
-| 61 | 滚动模式 |
+| 32 | 左侧触控板机械按压；FUNC 层为右键，其余层为左键 |
+| 34 | A320 触控板方向键模式 |
+| 36 | A320 触控板精细指针模式 |
+| 61 | TrackPoint 滚动模式 |
 
 物理位 60 不再参与滚动监听。
 
@@ -107,7 +108,7 @@ README 中展示的四张键位图是参考 Word 文档截图风格重画的深�
 - 其他情况下，指点设备继续作为鼠标指针移动。
 - TrackPoint 的 `trackpoint_scroll_processor` 在 `trackpoint_listener` 里位于 `zip_temp_layer 3 600` 前面。
 
-左手 A320 trackpad 也按同样思路处理：物理位 61 长按触发滚动，不再额外要求当前最高层是 `MOUSE_layer`。BB trackball 保持 scroll-only，不通过 CapsLock 切换。
+左手 A320 trackpad 在所有层默认直接输出水平/垂直滚动，且不会临时切换键盘层；按住物理位 34 时输出方向键，按住物理位 36 时临时切换为半速精细指针。物理位 32 在 FUNC 层保留鼠标右键，在 QWERTY、NUM、MOUSE 层为鼠标左键。BB trackball 保持 scroll-only，不通过 CapsLock 切换。
 
 ## 构建与验收
 
@@ -129,8 +130,10 @@ GitHub Actions 的 `Build ZMK firmware` 会按 `build.yaml` 构建 6 个固件�
 - QWERTY 拇指 Space 轻敲/按住行为正确，长按进 `FUNC` 不迟钝。
 - QWERTY 中间 Enter 短按正常回车，长按配合指点设备滚动，不再触发鼠标中键。
 - Word 输入时删除、空格、回车不再偶发焦点跳转。
-- TrackPoint、A320 trackpad 在物理位 61 长按后能滚动；BB trackball 保持滚动；CapsLock 不触发滚动。
-- 物理位 34 和 36 分别仍触发方向键模式与慢速/精细模式。
+- TrackPoint 在物理位 61 长按后能滚动；A320 trackpad 和 BB trackball 默认直接滚动；CapsLock 不触发滚动。
+- A320 触控板物理位 34、36 分别触发方向键模式与半速精细指针模式；物理位 32 在 FUNC 层为右键，其余三层为左键。
+- A320 触控板滚动时保持当前键盘层，不触发 `zip_temp_layer`；TrackPoint/BB trackball 的临时 MOUSE 层机制保持原样。
+- 蓝牙模式下触控板停止操作 2 秒后熄灯；USB 闪烁和 CapsLock 呼吸灯逻辑保持不变。
 
 ## 注意事项
 

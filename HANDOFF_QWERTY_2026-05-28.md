@@ -37,8 +37,8 @@ We have only modified and discussed the default `QWERTY` layer so far. Other lay
 
 Do not break or remove these special mechanisms:
 
-- Pointing device movement temporarily enters mouse layer via `zip_temp_layer 3 600`.
-- TrackPoint / trackpad / trackball scroll mode and arrow mode must keep working.
+- TrackPoint / BB trackball movement temporarily enters mouse layer via `zip_temp_layer 3 600`; A320 trackpad stays on the current layer because it scrolls by default.
+- TrackPoint / trackpad / trackball pointing behavior and arrow mode must keep working.
 - Middle 8 keys in the physical center area must not be changed to match the Word document:
   - two `C_MUTE` keys
   - two mouse click keys around home row center
@@ -154,9 +154,9 @@ Do not change this immediately unless user confirms after testing or asks to try
 Static checks completed:
 
 - keymap-drawer shows 66 keys per active layer.
-- `zip_temp_layer 3 600` remained in place.
+- `zip_temp_layer 3 600` remains for TrackPoint / BB trackball and is intentionally absent from the A320 trackpad listener.
 - Right TrackPoint no longer calls `zmk_keymap_highest_layer_active()` in the peripheral driver.
-- Current scroll listener position is `61`; position `60` is not a scroll key.
+- TrackPoint scroll listener position is `61`; A320 trackpad now scrolls by default in every layer.
 
 Not done:
 
@@ -179,9 +179,10 @@ Do not revert these unless the user explicitly requests it.
 - There are two keymap files, but the root user keymap is currently authoritative: `config/zitaotech_sofle.keymap`.
 - The board-level default keymap is not currently synchronized with the root keymap. Do not blindly overwrite one with the other.
 - Treat physical positions used by drivers as behavior contracts:
-  - position `34`: arrow mode
-  - position `36`: slow / precision mode
-  - position `61`: scroll mode
+  - position `32`: left trackpad press, right click on FUNC and left click on QWERTY/NUM/MOUSE
+  - position `34`: A320 arrow mode
+  - position `36`: A320 half-speed precision pointer mode
+  - position `61`: TrackPoint scroll mode
 - If future layer changes move the intended scroll keys again, update the three driver listeners accordingly.
 - User wants per-layer confirmation before editing.
 
